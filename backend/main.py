@@ -4,4 +4,4 @@ app = FastAPI()
 
 @app.post("/chat")
 def chat():
-    return {"message": "Hello from backend!"}
+    return {"reply": "Hello from backend!"}
