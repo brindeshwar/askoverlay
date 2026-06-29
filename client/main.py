@@ -21,7 +21,7 @@ window.setLayout(layout)
 
 def on_send():
     user_message = input_field.text()
-    response = requests.post("http://localhost:8000/chat")
+    response = requests.post("http://localhost:8000/chat", json={"message": user_message})
     reply = response.json()["reply"]
     response_label.setText(reply)
 
