@@ -1,6 +1,26 @@
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QInputDialog, QMessageBox
 import sys, requests
+import keyring
+
+SERVICE_NAME = "AskOverlay"
+KEY_NAME = "gemini_api_key"
+
+def get_or_prompt_api_key():
+    api_key = keyring.get_password(SERVICE_NAME, KEY_NAME)
+    if api_key is None:
+        api_key, ok = QInputDialog.getText(None, "Enter Gemini API Key", "Paste your Gemini API key (It will be saved on your system and encrypted):")
+        if ok and api_key:
+            keyring.set_password(SERVICE_NAME, KEY_NAME, api_key)
+            QMessageBox.information(None, "Success", "API key saved successfully.")
+        else:
+            QMessageBox.critical(None, "API Key Required", "AskOverlay needs a Gemini API key to function. The app will now close.")
+            sys.exit(1)
+    return api_key
+
 app = QApplication(sys.argv)
+
+api_key = get_or_prompt_api_key()
+
 window = QWidget()
 window.setWindowTitle("AskOverlay")
 window.resize(400, 200)
