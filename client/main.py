@@ -8,7 +8,7 @@ KEY_NAME = "gemini_api_key"
 def get_or_prompt_api_key():
     api_key = keyring.get_password(SERVICE_NAME, KEY_NAME)
     if api_key is None:
-        api_key, ok = QInputDialog.getText(None, "Enter Gemini API Key", "Paste your Gemini API key (It will be saved on your system and encrypted):")
+        api_key, ok = QInputDialog.getText(None, "Enter Gemini API Key", "Paste your Gemini API key (It will be saved on your system and encrypted):", QLineEdit.Password)
         if ok and api_key:
             keyring.set_password(SERVICE_NAME, KEY_NAME, api_key)
             QMessageBox.information(None, "Success", "API key saved successfully.")
@@ -41,7 +41,7 @@ window.setLayout(layout)
 
 def on_send():
     user_message = input_field.text()
-    response = requests.post("http://localhost:8000/chat", json={"message": user_message})
+    response = requests.post("http://localhost:8000/chat", json={"message": user_message}, headers={"X-Gemini-Key": api_key})
     reply = response.json()["reply"]
     response_label.setText(reply)
 
