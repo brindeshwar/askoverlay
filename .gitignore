@@ -5,3 +5,4 @@ venv/
 .venv-backend/
 .venv-client/
 *.pyc
+*.log
