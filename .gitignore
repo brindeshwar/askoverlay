@@ -6,3 +6,6 @@ venv/
 .venv-client/
 *.pyc
 *.log
+client_secret*.json
+token.json
+askoverlay.db
