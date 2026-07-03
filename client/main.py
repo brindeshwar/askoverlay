@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QTextEdit, QInputDialog, QMessageBox
 )
-from PySide6.QtCore import QThreadPool, QRunnable, Signal, QObject, Slot
+from PySide6.QtCore import QThreadPool, QRunnable, Signal, QObject, Slot, Qt
 from PySide6.QtGui import QTextCursor
 import sys, requests, keyring, logging
 
@@ -95,8 +95,17 @@ api_key = get_or_prompt_api_key()
 window = QWidget()
 window.setWindowTitle("AskOverlay")
 window.resize(400, 300)
+window.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 
 layout = QVBoxLayout()
+
+close_button = QPushButton("✕")
+close_button.setFixedSize(24, 24)
+close_button.clicked.connect(app.quit)
+
+top_bar = QHBoxLayout()
+top_bar.addStretch()
+top_bar.addWidget(close_button)
 
 response_area = QTextEdit()
 response_area.setReadOnly(True)
@@ -109,12 +118,23 @@ send_button = QPushButton("Send")
 input_layout.addWidget(input_field)
 input_layout.addWidget(send_button)
 
+def mousePressEvent(event):
+    if event.button() == Qt.LeftButton:
+        window._drag_pos = event.globalPosition().toPoint() - window.pos()
+        event.accept()
+
+def mouseMoveEvent(event):
+    if event.buttons() == Qt.LeftButton and hasattr(window, '_drag_pos'):
+        window.move(event.globalPosition().toPoint() - window._drag_pos)
+        event.accept()
+
+window.mousePressEvent = mousePressEvent
+window.mouseMoveEvent = mouseMoveEvent
+
+layout.addLayout(top_bar)
 layout.addWidget(response_area)
 layout.addLayout(input_layout)
 window.setLayout(layout)
-
-thread_pool = QThreadPool()
-log.debug(f"QThreadPool max threads: {thread_pool.maxThreadCount()}")
 
 # ── Slots ──────────────────────────────────────────────────────────────────
 def on_send():
