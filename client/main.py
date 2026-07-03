@@ -1,10 +1,17 @@
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QLineEdit, QPushButton, QTextEdit, QInputDialog, QMessageBox
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTextEdit, QInputDialog, QMessageBox, QSystemTrayIcon, QMenu
 )
 from PySide6.QtCore import QThreadPool, QRunnable, Signal, QObject, Slot, Qt
-from PySide6.QtGui import QTextCursor
-import sys, requests, keyring, logging
+from PySide6.QtGui import QTextCursor, QIcon, QAction
+import sys, requests, keyring, logging, os
+
+import ctypes
+if sys.platform == "win32":
+    myappid = "askoverlay.client.v1"
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ICON_PATH = os.path.join(BASE_DIR, "assets", "icon.png")
 
 # ── Logging setup ──────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -96,12 +103,13 @@ window = QWidget()
 window.setWindowTitle("AskOverlay")
 window.resize(400, 300)
 window.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+window.setWindowIcon(QIcon(ICON_PATH))
 
 layout = QVBoxLayout()
 
 close_button = QPushButton("✕")
 close_button.setFixedSize(24, 24)
-close_button.clicked.connect(app.quit)
+close_button.clicked.connect(window.hide)
 
 top_bar = QHBoxLayout()
 top_bar.addStretch()
@@ -135,6 +143,38 @@ layout.addLayout(top_bar)
 layout.addWidget(response_area)
 layout.addLayout(input_layout)
 window.setLayout(layout)
+
+# ── System tray ────────────────────────────────────────────────────────────
+icon = QIcon(ICON_PATH)
+if icon.isNull():
+    log.error(f"Failed to load tray icon from {ICON_PATH}")
+else:
+    log.debug(f"Tray icon loaded from {ICON_PATH}")
+
+tray_icon = QSystemTrayIcon(icon, app)
+
+tray_icon.setToolTip("AskOverlay")
+
+tray_menu = QMenu()
+
+open_action = QAction("Open")
+open_action.triggered.connect(window.show)
+open_action.triggered.connect(window.activateWindow)
+tray_menu.addAction(open_action)
+
+quit_action = QAction("Quit")
+quit_action.triggered.connect(app.quit)
+tray_menu.addAction(quit_action)
+
+tray_icon.setContextMenu(tray_menu)
+
+def on_tray_activated(reason):
+    if reason == QSystemTrayIcon.ActivationReason.Trigger:
+        window.show()
+        window.activateWindow()
+
+tray_icon.activated.connect(on_tray_activated)
+tray_icon.show()
 
 # ── Slots ──────────────────────────────────────────────────────────────────
 def on_send():
