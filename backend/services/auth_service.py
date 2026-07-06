@@ -2,8 +2,10 @@ import os
 import jwt
 import requests
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 from sqlalchemy.orm import Session
 from database.models import User
+
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -25,8 +27,7 @@ def build_google_login_url(redirect_uri: str) -> str:
         "access_type": "offline",
         "prompt": "consent",
     }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"{GOOGLE_AUTH_URL}?{query}"
+    return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
 def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
