@@ -51,7 +51,11 @@ def build_window(icon_path):
     layout.addLayout(input_layout)
     window.setLayout(layout)
 
-    return window, response_area, input_field, send_button
+    login_button = QPushButton("Login")
+    login_button.setFixedSize(50, 24)
+    top_bar.addWidget(login_button)
+
+    return window, response_area, input_field, send_button, login_button
 
 
 def build_tray_icon(app, window, icon_path):
@@ -71,6 +75,10 @@ def build_tray_icon(app, window, icon_path):
     tray_menu.addAction(quit_action)
 
     tray_icon.setContextMenu(tray_menu)
+    
+    tray_icon._menu = tray_menu
+    tray_icon._open_action = open_action
+    tray_icon._quit_action = quit_action
 
     def on_tray_activated(reason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
