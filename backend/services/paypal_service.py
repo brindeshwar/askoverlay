@@ -5,6 +5,7 @@ import requests
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
 PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET")
 PAYPAL_BASE_URL = "https://api-m.sandbox.paypal.com"
+PAYPAL_WEBHOOK_ID = os.getenv("PAYPAL_WEBHOOK_ID")
 
 PREMIUM_PRICE_USD = "5.00"
 
@@ -61,3 +62,22 @@ def capture_order(order_id: str) -> dict:
     )
     response.raise_for_status()
     return response.json()
+
+def verify_webhook_signature(headers: dict, body: dict) -> bool:
+    access_token = get_access_token()
+    payload = {
+        "transmission_id": headers.get("paypal-transmission-id"),
+        "transmission_time": headers.get("paypal-transmission-time"),
+        "cert_url": headers.get("paypal-cert-url"),
+        "auth_algo": headers.get("paypal-auth-algo"),
+        "transmission_sig": headers.get("paypal-transmission-sig"),
+        "webhook_id": PAYPAL_WEBHOOK_ID,
+        "webhook_event": body,
+    }
+    response = requests.post(
+        f"{PAYPAL_BASE_URL}/v1/notifications/verify-webhook-signature",
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+        json=payload,
+    )
+    response.raise_for_status()
+    return response.json().get("verification_status") == "SUCCESS"
