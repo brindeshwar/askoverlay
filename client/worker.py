@@ -59,3 +59,32 @@ class StreamWorker(QRunnable):
         finally:
             log.info("StreamWorker finished")
             self.signals.finished.emit()
+
+
+class QuotaSignals(QObject):
+    result = Signal(str, object, object)  # mode, used, limit
+    error = Signal(str)
+
+class QuotaCheckWorker(QRunnable):
+    def __init__(self, auth_mode, credential):
+        super().__init__()
+        self.auth_mode = auth_mode
+        self.credential = credential
+        self.signals = QuotaSignals()
+
+    @Slot()
+    def run(self):
+        headers = {}
+        if self.auth_mode == "session":
+            headers["X-Session-Token"] = self.credential
+        elif self.auth_mode == "device":
+            headers["X-Device-Id"] = self.credential
+
+        try:
+            resp = requests.get("http://localhost:8000/quota/status", headers=headers, timeout=(10, 10))
+            resp.raise_for_status()
+            data = resp.json()
+            self.signals.result.emit(data["mode"], data["used"], data["limit"])
+        except Exception as e:
+            log.debug(f"Quota status check failed: {e}")
+            self.signals.error.emit(str(e))

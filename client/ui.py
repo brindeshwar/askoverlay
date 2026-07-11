@@ -27,6 +27,9 @@ def build_window(icon_path):
     top_bar.addWidget(login_button)
     top_bar.addWidget(close_button)
 
+    usage_label = QLabel("")
+    usage_label.setStyleSheet("color: gray; font-size: 10px;")
+
     response_area = QTextEdit()
     response_area.setReadOnly(True)
     response_area.setPlaceholderText("Responses will appear here...")
@@ -52,11 +55,12 @@ def build_window(icon_path):
     window.mouseMoveEvent = mouseMoveEvent
 
     layout.addLayout(top_bar)
+    layout.addWidget(usage_label)
     layout.addWidget(response_area)
     layout.addLayout(input_layout)
     window.setLayout(layout)
 
-    return window, response_area, input_field, send_button, login_button
+    return window, response_area, input_field, send_button, login_button, usage_label
 
 
 def build_tray_icon(app, window, icon_path):
@@ -76,7 +80,7 @@ def build_tray_icon(app, window, icon_path):
     tray_menu.addAction(quit_action)
 
     tray_icon.setContextMenu(tray_menu)
-    
+
     tray_icon._menu = tray_menu
     tray_icon._open_action = open_action
     tray_icon._quit_action = quit_action
@@ -107,7 +111,7 @@ def show_first_run_dialog():
     dialog.setLayout(layout)
 
     result = {"choice": None}
-    thread_pool = QThreadPool()  # local, just for this one login attempt
+    thread_pool = QThreadPool()
 
     def choose_try():
         result["choice"] = "try"

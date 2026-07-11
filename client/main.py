@@ -16,7 +16,7 @@ from auth import (
     SESSION_TOKEN_KEY_NAME,
 )
 from ui import build_window, build_tray_icon, show_first_run_dialog, show_quota_dialog
-from worker import StreamWorker
+from worker import StreamWorker, QuotaCheckWorker
 import keyring
 
 if sys.platform == "win32":
@@ -52,7 +52,7 @@ if auth_mode is None:
     else:
         sys.exit(0)
 
-window, response_area, input_field, send_button, login_button = build_window(ICON_PATH)
+window, response_area, input_field, send_button, login_button, usage_label = build_window(ICON_PATH)
 if auth_mode == "session":
     login_button.setText("✓ Signed in")
     login_button.setEnabled(False)
@@ -107,6 +107,7 @@ def on_finished():
     log.info("Stream finished, re-enabling send button")
     response_area.append("\n")
     send_button.setEnabled(True)
+    refresh_usage_indicator()
 
 def on_login():
     login_button.setEnabled(False)
@@ -124,6 +125,7 @@ def on_login_success(email, name):
     credential = session_token
     login_button.setText(f"✓ {name.split()[0]}")
     login_button.setEnabled(False)
+    refresh_usage_indicator()
 
 def on_login_error(error_msg):
     log.error(f"Login failed: {error_msg}")
@@ -154,11 +156,28 @@ def start_byok_setup():
     auth_mode = "byok"
     credential = api_key
     response_area.append("\n[Switched to your own Gemini API key. You now have unlimited usage.]\n")
+    refresh_usage_indicator()
+
+def refresh_usage_indicator():
+    if auth_mode == "byok":
+        usage_label.setText("")
+        return
+    worker = QuotaCheckWorker(auth_mode, credential)
+    worker.signals.result.connect(on_quota_status)
+    worker.signals.error.connect(lambda e: log.debug(f"Quota status check failed: {e}"))
+    thread_pool.start(worker)
+
+def on_quota_status(mode, used, limit):
+    if used is None or limit is None:
+        usage_label.setText("")
+    else:
+        usage_label.setText(f"{used}/{limit} requests today ({mode})")
 
 login_button.clicked.connect(on_login)
 send_button.clicked.connect(on_send)
 input_field.returnPressed.connect(on_send)
 
 window.show()
+refresh_usage_indicator()
 log.info("AskOverlay client started")
 sys.exit(app.exec())
