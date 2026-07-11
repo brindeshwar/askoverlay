@@ -1,9 +1,10 @@
+from auth import LoginWorker
+from PySide6.QtGui import QIcon, QAction
+from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QTextEdit, QSystemTrayIcon, QMenu
+    QTextEdit, QSystemTrayIcon, QMenu, QDialog, QLabel
 )
-from PySide6.QtGui import QIcon, QAction
-from PySide6.QtCore import Qt
 
 def build_window(icon_path):
     window = QWidget()
@@ -14,12 +15,16 @@ def build_window(icon_path):
 
     layout = QVBoxLayout()
 
+    login_button = QPushButton("Login")
+    login_button.setFixedSize(90, 24)
+
     close_button = QPushButton("✕")
     close_button.setFixedSize(24, 24)
     close_button.clicked.connect(window.hide)
 
     top_bar = QHBoxLayout()
     top_bar.addStretch()
+    top_bar.addWidget(login_button)
     top_bar.addWidget(close_button)
 
     response_area = QTextEdit()
@@ -50,10 +55,6 @@ def build_window(icon_path):
     layout.addWidget(response_area)
     layout.addLayout(input_layout)
     window.setLayout(layout)
-
-    login_button = QPushButton("Login")
-    login_button.setFixedSize(50, 24)
-    top_bar.addWidget(login_button)
 
     return window, response_area, input_field, send_button, login_button
 
@@ -89,3 +90,86 @@ def build_tray_icon(app, window, icon_path):
     tray_icon.show()
 
     return tray_icon
+
+def show_first_run_dialog():
+    dialog = QDialog()
+    dialog.setWindowTitle("Welcome to AskOverlay")
+    dialog.setFixedSize(320, 160)
+
+    layout = QVBoxLayout()
+    status_label = QLabel("Get started:")
+    layout.addWidget(status_label)
+
+    try_button = QPushButton("Try for free (no signup)")
+    login_button = QPushButton("Sign in with Google")
+    layout.addWidget(try_button)
+    layout.addWidget(login_button)
+    dialog.setLayout(layout)
+
+    result = {"choice": None}
+    thread_pool = QThreadPool()  # local, just for this one login attempt
+
+    def choose_try():
+        result["choice"] = "try"
+        dialog.accept()
+
+    def start_login():
+        try_button.setEnabled(False)
+        login_button.setEnabled(False)
+        status_label.setText("Opening browser — complete sign-in there...")
+
+        worker = LoginWorker()
+        worker.signals.success.connect(on_success)
+        worker.signals.error.connect(on_error)
+        thread_pool.start(worker)
+
+    def on_success(email, name):
+        result["choice"] = "login"
+        status_label.setText(f"Signed in as {name}.")
+        dialog.accept()
+
+    def on_error(error_msg):
+        status_label.setText(f"Sign-in failed: {error_msg}")
+        try_button.setEnabled(True)
+        login_button.setEnabled(True)
+
+    try_button.clicked.connect(choose_try)
+    login_button.clicked.connect(start_login)
+
+    dialog.exec()
+    return result["choice"]
+
+def show_quota_dialog(auth_mode, detail_message):
+    dialog = QDialog()
+    dialog.setWindowTitle("Limit Reached")
+    dialog.setFixedSize(320, 160)
+
+    layout = QVBoxLayout()
+    layout.addWidget(QLabel(detail_message))
+
+    result = {"choice": None}
+
+    def pick(value):
+        result["choice"] = value
+        dialog.accept()
+
+    if auth_mode == "device":
+        login_btn = QPushButton("Sign in with Google")
+        login_btn.clicked.connect(lambda: pick("login"))
+        layout.addWidget(login_btn)
+    elif auth_mode == "session":
+        upgrade_btn = QPushButton("Upgrade to Premium")
+        upgrade_btn.clicked.connect(lambda: pick("upgrade"))
+        layout.addWidget(upgrade_btn)
+
+    byok_btn = QPushButton("Use your own Gemini API key")
+    byok_btn.clicked.connect(lambda: pick("byok"))
+    layout.addWidget(byok_btn)
+
+    dismiss_btn = QPushButton("Maybe later")
+    dismiss_btn.clicked.connect(lambda: pick(None))
+    layout.addWidget(dismiss_btn)
+
+    dialog.setLayout(layout)
+    dialog.exec()
+    return result["choice"]
