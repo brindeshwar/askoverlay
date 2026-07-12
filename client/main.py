@@ -37,7 +37,6 @@ log = logging.getLogger("askoverlay.client")
 
 app = QApplication(sys.argv)
 
-# ── Determine how this session authenticates ────────────────────────────────
 auth_mode, credential = determine_auth_mode()
 
 if auth_mode is None:
@@ -62,6 +61,16 @@ thread_pool = QThreadPool()
 log.debug(f"QThreadPool max threads: {thread_pool.maxThreadCount()}")
 log.info(f"Starting in auth mode: {auth_mode}")
 
+# ── Worker reference tracking (prevents premature garbage collection) ───────
+_active_workers = []
+
+def _track(worker):
+    _active_workers.append(worker)
+
+def _untrack(worker):
+    if worker in _active_workers:
+        _active_workers.remove(worker)
+
 # ── Slots ──────────────────────────────────────────────────────────────────
 def on_send():
     user_message = input_field.text()
@@ -75,10 +84,12 @@ def on_send():
     send_button.setEnabled(False)
 
     worker = StreamWorker(user_message, auth_mode, credential)
+    _track(worker)
     worker.signals.quota_exceeded.connect(on_quota_exceeded)
     worker.signals.chunk_received.connect(append_chunk)
     worker.signals.error.connect(on_error)
     worker.signals.finished.connect(on_finished)
+    worker.signals.finished.connect(lambda: _untrack(worker))
 
     thread_pool.start(worker)
 
@@ -113,8 +124,11 @@ def on_login():
     login_button.setEnabled(False)
     login_button.setText("Logging in...")
     worker = LoginWorker()
+    _track(worker)
     worker.signals.success.connect(on_login_success)
+    worker.signals.success.connect(lambda *_: _untrack(worker))
     worker.signals.error.connect(on_login_error)
+    worker.signals.error.connect(lambda *_: _untrack(worker))
     thread_pool.start(worker)
 
 def on_login_success(email, name):
@@ -138,8 +152,11 @@ def start_upgrade():
         response_area.append("\n[Upgrade requires signing in first.]\n")
         return
     worker = CheckoutWorker(credential)
+    _track(worker)
     worker.signals.success.connect(on_checkout_ready)
+    worker.signals.success.connect(lambda *_: _untrack(worker))
     worker.signals.error.connect(on_checkout_error)
+    worker.signals.error.connect(lambda *_: _untrack(worker))
     thread_pool.start(worker)
 
 def on_checkout_ready(approve_url):
@@ -163,8 +180,11 @@ def refresh_usage_indicator():
         usage_label.setText("")
         return
     worker = QuotaCheckWorker(auth_mode, credential)
+    _track(worker)
     worker.signals.result.connect(on_quota_status)
+    worker.signals.result.connect(lambda *_: _untrack(worker))
     worker.signals.error.connect(lambda e: log.debug(f"Quota status check failed: {e}"))
+    worker.signals.error.connect(lambda *_: _untrack(worker))
     thread_pool.start(worker)
 
 def on_quota_status(mode, used, limit):
