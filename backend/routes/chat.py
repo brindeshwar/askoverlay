@@ -17,6 +17,7 @@ BYOK_MODEL = "gemini-3.5-flash"
 
 class ChatRequest(BaseModel):
     message: str
+    interaction_id: str | None = None
 
 @router.post("/chat")
 async def chat(
@@ -27,7 +28,7 @@ async def chat(
 ):
     if x_gemini_key:
         return StreamingResponse(
-            stream_gemini_response(x_gemini_key, BYOK_MODEL, request.message),
+            stream_gemini_response(x_gemini_key, BYOK_MODEL, request.message, request.interaction_id),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
         )
@@ -50,7 +51,7 @@ async def chat(
             raise HTTPException(status_code=429, detail="Daily limit reached. Upgrade to Premium for more, or come back tomorrow.")
 
         return StreamingResponse(
-            stream_gemini_response(BACKEND_GEMINI_KEY, TIERED_MODEL, request.message),
+            stream_gemini_response(BACKEND_GEMINI_KEY, TIERED_MODEL, request.message, request.interaction_id),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
         )
@@ -66,7 +67,7 @@ async def chat(
             raise HTTPException(status_code=429, detail="Daily free limit reached. Come back tomorrow, or add your own Gemini API key for unlimited use.")
 
         return StreamingResponse(
-            stream_gemini_response(BACKEND_GEMINI_KEY, TIERED_MODEL, request.message),
+            stream_gemini_response(BACKEND_GEMINI_KEY, TIERED_MODEL, request.message, request.interaction_id),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
         )

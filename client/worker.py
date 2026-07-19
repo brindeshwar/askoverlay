@@ -9,13 +9,15 @@ class WorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
     quota_exceeded = Signal(str)
+    interaction_id_received = Signal(str)
 
 class StreamWorker(QRunnable):
-    def __init__(self, message, auth_mode, credential):
+    def __init__(self, message, auth_mode, credential, interaction_id=None):
         super().__init__()
         self.message = message
         self.auth_mode = auth_mode
         self.credential = credential
+        self.interaction_id = interaction_id
         self.signals = WorkerSignals()
 
     @Slot()
@@ -31,7 +33,7 @@ class StreamWorker(QRunnable):
         try:
             with requests.post(
                 "http://localhost:8000/chat",
-                json={"message": self.message},
+                json={"message": self.message, "interaction_id": self.interaction_id},
                 headers=headers,
                 stream=True,
                 timeout=(10, None)
@@ -52,7 +54,11 @@ class StreamWorker(QRunnable):
                             if chunk == "[DONE]":
                                 log.debug("Received [DONE] sentinel")
                                 break
-                            self.signals.chunk_received.emit(chunk)
+                            elif chunk.startswith("[INTERACTION_ID:"):
+                                new_id = chunk[len("[INTERACTION_ID:"):-1]
+                                self.signals.interaction_id_received.emit(new_id)
+                            else:
+                                self.signals.chunk_received.emit(chunk)
         except Exception as e:
             log.error(f"StreamWorker error: {e}", exc_info=True)
             self.signals.error.emit(str(e))

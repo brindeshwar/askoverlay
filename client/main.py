@@ -38,6 +38,7 @@ log = logging.getLogger("askoverlay.client")
 app = QApplication(sys.argv)
 
 auth_mode, credential = determine_auth_mode()
+current_interaction_id = None
 
 if auth_mode is None:
     choice = show_first_run_dialog()
@@ -83,13 +84,14 @@ def on_send():
     input_field.clear()
     send_button.setEnabled(False)
 
-    worker = StreamWorker(user_message, auth_mode, credential)
+    worker = StreamWorker(user_message, auth_mode, credential, current_interaction_id)
     _track(worker)
     worker.signals.quota_exceeded.connect(on_quota_exceeded)
     worker.signals.chunk_received.connect(append_chunk)
     worker.signals.error.connect(on_error)
     worker.signals.finished.connect(on_finished)
     worker.signals.finished.connect(lambda: _untrack(worker))
+    worker.signals.interaction_id_received.connect(on_interaction_id_received)
 
     thread_pool.start(worker)
 
@@ -192,6 +194,11 @@ def on_quota_status(mode, used, limit):
         usage_label.setText("")
     else:
         usage_label.setText(f"{used}/{limit} requests today ({mode})")
+        
+def on_interaction_id_received(new_id):
+    global current_interaction_id
+    current_interaction_id = new_id
+    log.debug(f"Session interaction ID updated: {new_id}")
 
 login_button.clicked.connect(on_login)
 send_button.clicked.connect(on_send)
