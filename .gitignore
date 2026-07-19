@@ -9,5 +9,5 @@ venv/
 client_secret*.json
 token.json
 askoverlay.db
-backend/test2.json
 backend/test.json
+backend/test2.json
