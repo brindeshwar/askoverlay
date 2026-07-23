@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 import os
 from fastapi import APIRouter, Header, HTTPException
@@ -8,6 +9,8 @@ from database.models import User, Device
 from services.gemini_service import stream_gemini_response
 from services.quota_service import check_and_increment_quota, check_and_increment_user_quota
 from services.auth_service import verify_session_token
+
+log = logging.getLogger("askoverlay.chat")
 
 router = APIRouter()
 
@@ -27,6 +30,7 @@ async def chat(
     x_session_token: str | None = Header(default=None),
 ):
     if x_gemini_key:
+        log.info("Routing: BYOK path")
         return StreamingResponse(
             stream_gemini_response(x_gemini_key, BYOK_MODEL, request.message, request.interaction_id),
             media_type="text/event-stream",
@@ -34,6 +38,7 @@ async def chat(
         )
 
     if x_session_token:
+        log.info("Routing: session (logged-in) path")
         user_id = verify_session_token(x_session_token)
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid or expired session token.")
@@ -57,6 +62,7 @@ async def chat(
         )
 
     if x_device_id:
+        log.info("Routing: anonymous device path")
         db = SessionLocal()
         try:
             allowed = check_and_increment_quota(db, x_device_id)
@@ -72,6 +78,7 @@ async def chat(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
         )
 
+    log.warning("Chat request with no valid auth header")
     raise HTTPException(status_code=400, detail="Missing X-Gemini-Key or X-Device-Id header.")
 
 @router.get("/quota/status")

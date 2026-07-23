@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from database.connection import SessionLocal
@@ -8,6 +9,8 @@ from services.auth_service import (
     upsert_user,
     create_session_token,
 )
+
+log = logging.getLogger("askoverlay.auth_routes")
 
 router = APIRouter()
 
@@ -24,9 +27,11 @@ class GoogleCallbackRequest(BaseModel):
 
 @router.post("/auth/google/callback")
 def google_callback(request: GoogleCallbackRequest):
+    log.info("Received OAuth callback")
     try:
         tokens = exchange_code_for_tokens(request.code, request.redirect_uri)
     except Exception as e:
+        log.error(f"Token exchange failed: {e}")
         raise HTTPException(status_code=400, detail=f"Token exchange failed: {str(e)}")
 
     access_token = tokens.get("access_token")
@@ -35,6 +40,7 @@ def google_callback(request: GoogleCallbackRequest):
     try:
         profile = fetch_google_profile(access_token)
     except Exception as e:
+        log.error(f"Profile fetch failed: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to fetch profile: {str(e)}")
 
     db = SessionLocal()
@@ -44,4 +50,5 @@ def google_callback(request: GoogleCallbackRequest):
     finally:
         db.close()
 
+    log.info(f"Login complete for user_id={user.id}")
     return {"session_token": session_token, "email": user.email, "name": user.name}

@@ -1,6 +1,9 @@
 import os
 import base64
+import logging
 import requests
+
+log = logging.getLogger("askoverlay.paypal")
 
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
 PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET")
@@ -25,6 +28,7 @@ def get_access_token() -> str:
 
 
 def create_order(custom_id: str, return_url: str, cancel_url: str) -> dict:
+    log.info(f"Creating PayPal order for user_id={custom_id}")
     access_token = get_access_token()
     response = requests.post(
         f"{PAYPAL_BASE_URL}/v2/checkout/orders",
@@ -49,9 +53,12 @@ def create_order(custom_id: str, return_url: str, cancel_url: str) -> dict:
     response.raise_for_status()
     order = response.json()
     approve_url = next(link["href"] for link in order["links"] if link["rel"] == "approve")
+    log.info(f"Order created: order_id={order['id']}")
     return {"order_id": order["id"], "approve_url": approve_url}
 
+
 def capture_order(order_id: str) -> dict:
+    log.info(f"Capturing order: order_id={order_id}")
     access_token = get_access_token()
     response = requests.post(
         f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}/capture",
@@ -61,7 +68,9 @@ def capture_order(order_id: str) -> dict:
         },
     )
     response.raise_for_status()
+    log.info(f"Order captured: order_id={order_id}")
     return response.json()
+
 
 def verify_webhook_signature(headers: dict, body: dict) -> bool:
     access_token = get_access_token()
@@ -80,4 +89,6 @@ def verify_webhook_signature(headers: dict, body: dict) -> bool:
         json=payload,
     )
     response.raise_for_status()
-    return response.json().get("verification_status") == "SUCCESS"
+    result = response.json().get("verification_status") == "SUCCESS"
+    log.info(f"Webhook signature verification: {'PASSED' if result else 'FAILED'}")
+    return result

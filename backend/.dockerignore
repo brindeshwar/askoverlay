@@ -1,0 +1,11 @@
+.venv-backend/
+__pycache__/
+*.pyc
+.env
+*.db
+*.log
+test.json
+test2.json
+callback_test.json
+.git
+.gitignore

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from database.connection import SessionLocal
@@ -5,6 +6,7 @@ from services.auth_service import verify_session_token
 from database.models import User
 from services.paypal_service import create_order, capture_order, verify_webhook_signature
 
+log = logging.getLogger("askoverlay.billing")
 
 router = APIRouter()
 
@@ -24,15 +26,19 @@ def create_checkout(x_session_token: str = Header(...)):
     )
     return {"approve_url": result["approve_url"]}
 
+
 @router.post("/billing/webhook")
 async def billing_webhook(request: Request):
     body = await request.json()
     headers = request.headers
 
     if not verify_webhook_signature(headers, body):
+        log.warning("Webhook signature verification failed")
         raise HTTPException(status_code=400, detail="Invalid webhook signature.")
 
     event_type = body.get("event_type")
+    log.info(f"Webhook received: event_type={event_type}")
+
     if event_type == "CHECKOUT.ORDER.APPROVED":
         order_id = body["resource"]["id"]
         custom_id = body["resource"]["purchase_units"][0]["custom_id"]
@@ -42,8 +48,7 @@ async def billing_webhook(request: Request):
         except Exception as e:
             if "ORDER_ALREADY_CAPTURED" not in str(e):
                 raise
-            
-        capture_order(order_id)  # actually charges the payment now
+            log.info(f"Order {order_id} was already captured, skipping")
 
         db = SessionLocal()
         try:
@@ -51,14 +56,17 @@ async def billing_webhook(request: Request):
             if user:
                 user.tier = "premium"
                 db.commit()
+                log.info(f"User {user.id} upgraded to premium")
         finally:
             db.close()
 
     return {"status": "ok"}
 
+
 @router.get("/billing/success", response_class=HTMLResponse)
 def billing_success(token: str):
     return "<html><body><h2>Payment successful! You're now on Premium. You can close this window and return to AskOverlay.</h2></body></html>"
+
 
 @router.get("/billing/cancel", response_class=HTMLResponse)
 def billing_cancel():

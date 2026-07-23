@@ -1,11 +1,13 @@
 import os
 import jwt
+import logging
 import requests
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from sqlalchemy.orm import Session
 from database.models import User
 
+log = logging.getLogger("askoverlay.auth")
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -27,10 +29,12 @@ def build_google_login_url(redirect_uri: str) -> str:
         "access_type": "offline",
         "prompt": "consent",
     }
+    log.info(f"Building login URL for redirect_uri={redirect_uri}")
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
 def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
+    log.info("Exchanging authorization code for tokens")
     response = requests.post(GOOGLE_TOKEN_URL, data={
         "client_id": GOOGLE_CLIENT_ID,
         "client_secret": GOOGLE_CLIENT_SECRET,
@@ -39,13 +43,16 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
         "grant_type": "authorization_code",
     })
     response.raise_for_status()
+    log.info("Token exchange successful")
     return response.json()
 
 
 def fetch_google_profile(access_token: str) -> dict:
     response = requests.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"})
     response.raise_for_status()
-    return response.json()
+    profile = response.json()
+    log.info(f"Fetched profile for email={profile.get('email')}")
+    return profile
 
 
 def upsert_user(db: Session, profile: dict, refresh_token: str | None) -> User:
@@ -53,6 +60,7 @@ def upsert_user(db: Session, profile: dict, refresh_token: str | None) -> User:
     user = db.query(User).filter(User.google_id == google_id).first()
 
     if user is None:
+        log.info(f"Creating new user: google_id={google_id}, email={profile.get('email')}")
         user = User(
             google_id=google_id,
             email=profile.get("email"),
@@ -63,6 +71,7 @@ def upsert_user(db: Session, profile: dict, refresh_token: str | None) -> User:
         )
         db.add(user)
     else:
+        log.info(f"Updating existing user: id={user.id}, email={profile.get('email')}")
         user.email = profile.get("email")
         user.name = profile.get("name")
         if refresh_token:
@@ -78,6 +87,7 @@ def create_session_token(user_id: int) -> str:
         "sub": str(user_id),
         "exp": datetime.now(timezone.utc) + timedelta(days=SESSION_TOKEN_EXPIRY_DAYS),
     }
+    log.info(f"Creating session token for user_id={user_id}")
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
@@ -85,5 +95,6 @@ def verify_session_token(token: str) -> int | None:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return int(payload["sub"])
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as e:
+        log.warning(f"Session token verification failed: {e}")
         return None
