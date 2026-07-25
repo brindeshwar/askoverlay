@@ -16,7 +16,7 @@ log = logging.getLogger("askoverlay.client.auth")
 SERVICE_NAME = "AskOverlay"
 GEMINI_KEY_NAME = "gemini_api_key"
 SESSION_TOKEN_KEY_NAME = "session_token"
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = "http://135.235.216.131:8000"
 DEVICE_ID_KEY_NAME = "device_id"
 
 def get_or_prompt_api_key():

@@ -1,5 +1,6 @@
 import logging
 import requests
+from auth import BACKEND_URL
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 log = logging.getLogger("askoverlay.client.worker")
@@ -32,7 +33,7 @@ class StreamWorker(QRunnable):
 
         try:
             with requests.post(
-                "http://localhost:8000/chat",
+                f"{BACKEND_URL}/chat",
                 json={"message": self.message, "interaction_id": self.interaction_id},
                 headers=headers,
                 stream=True,
@@ -87,7 +88,7 @@ class QuotaCheckWorker(QRunnable):
             headers["X-Device-Id"] = self.credential
 
         try:
-            resp = requests.get("http://localhost:8000/quota/status", headers=headers, timeout=(10, 10))
+            resp = requests.get(f"{BACKEND_URL}/quota/status", headers=headers, timeout=(10, 10))
             resp.raise_for_status()
             data = resp.json()
             self.signals.result.emit(data["mode"], data["used"], data["limit"])
