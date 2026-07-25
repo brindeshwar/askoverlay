@@ -10,7 +10,7 @@ log = logging.getLogger("askoverlay.billing")
 
 router = APIRouter()
 
-BACKEND_PUBLIC_URL = "http://localhost:8000"  # becomes your EC2 URL after deployment
+BACKEND_PUBLIC_URL = "http://135.235.216.131:8000"
 
 
 @router.post("/billing/checkout")
