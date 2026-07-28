@@ -12,4 +12,6 @@ askoverlay.db
 backend/test.json
 backend/test2.json
 askoverlay-key.pem
-#  ssh -i "D:\Projects\askoverlay\askoverlay-key.pem" azureuser@135.235.216.131
+build/
+dist/
+*.spec
