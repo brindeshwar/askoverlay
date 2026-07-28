@@ -5,7 +5,6 @@ import logging
 import webbrowser
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QThreadPool
-from PySide6.QtGui import QTextCursor
 from auth import (
     determine_auth_mode,
     get_or_create_device_id,
@@ -15,7 +14,7 @@ from auth import (
     SERVICE_NAME,
     SESSION_TOKEN_KEY_NAME,
 )
-from ui import build_window, build_tray_icon, show_first_run_dialog, show_quota_dialog
+from ui import build_window, build_icon, build_tray_icon, show_first_run_dialog, show_quota_dialog, WINDOW_SIZE, ICON_SIZE
 from worker import StreamWorker, QuotaCheckWorker
 import keyring
 
@@ -39,6 +38,7 @@ app = QApplication(sys.argv)
 
 auth_mode, credential = determine_auth_mode()
 current_interaction_id = None
+current_assistant_bubble = None
 
 if auth_mode is None:
     choice = show_first_run_dialog()
@@ -52,10 +52,33 @@ if auth_mode is None:
     else:
         sys.exit(0)
 
-window, response_area, input_field, send_button, login_button, usage_label = build_window(ICON_PATH)
+window, add_user_message, add_assistant_message, add_system_message, input_field, send_button, login_button, usage_label, minimize_button = build_window(ICON_PATH)
 if auth_mode == "session":
     login_button.setText("✓ Signed in")
     login_button.setEnabled(False)
+
+def show_chat_window():
+    icon_pos = icon_widget.pos()
+    window.move(icon_pos.x() + ICON_SIZE.width(), icon_pos.y())
+    window.show()
+    window.activateWindow()
+
+def hide_chat_window():
+    window.hide()
+
+def toggle_chat_window():
+    if window.isVisible():
+        hide_chat_window()
+    else:
+        show_chat_window()
+
+def on_icon_drag(delta):
+    if window.isVisible():
+        window.move(window.pos() + delta)
+
+icon_widget = build_icon(ICON_PATH, on_click=toggle_chat_window, on_drag=on_icon_drag)
+minimize_button.clicked.connect(hide_chat_window)
+
 tray_icon = build_tray_icon(app, window, ICON_PATH)
 
 thread_pool = QThreadPool()
@@ -74,15 +97,17 @@ def _untrack(worker):
 
 # ── Slots ──────────────────────────────────────────────────────────────────
 def on_send():
+    global current_assistant_bubble
     user_message = input_field.text()
     if not user_message.strip():
         return
 
     log.info(f"Sending message: {user_message[:50]}")
-    response_area.append(f"You: {user_message}\n")
-    response_area.append("Assistant: ")
+    add_user_message(user_message)
     input_field.clear()
     send_button.setEnabled(False)
+
+    current_assistant_bubble = add_assistant_message()
 
     worker = StreamWorker(user_message, auth_mode, credential, current_interaction_id)
     _track(worker)
@@ -96,13 +121,11 @@ def on_send():
     thread_pool.start(worker)
 
 def append_chunk(chunk):
-    response_area.moveCursor(QTextCursor.End)
-    response_area.insertPlainText(chunk)
+    current_assistant_bubble.append(chunk)
 
 def on_error(error_msg):
     log.error(f"UI received error signal: {error_msg}")
-    response_area.moveCursor(QTextCursor.End)
-    response_area.insertPlainText(f"\n[Error: {error_msg}]")
+    add_system_message(f"Error: {error_msg}")
 
 def on_quota_exceeded(detail_message):
     log.info(f"Quota exceeded: {detail_message}")
@@ -118,7 +141,7 @@ def on_quota_exceeded(detail_message):
 
 def on_finished():
     log.info("Stream finished, re-enabling send button")
-    response_area.append("\n")
+    current_assistant_bubble.finalize()
     send_button.setEnabled(True)
     refresh_usage_indicator()
 
@@ -147,11 +170,11 @@ def on_login_error(error_msg):
     log.error(f"Login failed: {error_msg}")
     login_button.setText("Login")
     login_button.setEnabled(True)
-    response_area.append(f"\n[Login error: {error_msg}]\n")
+    add_system_message(f"Login error: {error_msg}")
 
 def start_upgrade():
     if auth_mode != "session":
-        response_area.append("\n[Upgrade requires signing in first.]\n")
+        add_system_message("Upgrade requires signing in first.")
         return
     worker = CheckoutWorker(credential)
     _track(worker)
@@ -163,18 +186,18 @@ def start_upgrade():
 
 def on_checkout_ready(approve_url):
     webbrowser.open(approve_url)
-    response_area.append("\n[Complete payment in your browser. Once done, you'll be Premium — just send another message.]\n")
+    add_system_message("Complete payment in your browser. Once done, you'll be Premium — just send another message.")
 
 def on_checkout_error(error_msg):
     log.error(f"Checkout failed: {error_msg}")
-    response_area.append(f"\n[Upgrade error: {error_msg}]\n")
+    add_system_message(f"Upgrade error: {error_msg}")
 
 def start_byok_setup():
     global auth_mode, credential
     api_key = get_or_prompt_api_key()
     auth_mode = "byok"
     credential = api_key
-    response_area.append("\n[Switched to your own Gemini API key. You now have unlimited usage.]\n")
+    add_system_message("Switched to your own Gemini API key. You now have unlimited usage.")
     refresh_usage_indicator()
 
 def refresh_usage_indicator():
@@ -194,7 +217,7 @@ def on_quota_status(mode, used, limit):
         usage_label.setText("")
     else:
         usage_label.setText(f"{used}/{limit} requests today ({mode})")
-        
+
 def on_interaction_id_received(new_id):
     global current_interaction_id
     current_interaction_id = new_id
@@ -204,7 +227,7 @@ login_button.clicked.connect(on_login)
 send_button.clicked.connect(on_send)
 input_field.returnPressed.connect(on_send)
 
-window.show()
+icon_widget.show()
 refresh_usage_indicator()
 log.info("AskOverlay client started")
 sys.exit(app.exec())

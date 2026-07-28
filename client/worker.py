@@ -1,3 +1,4 @@
+import json
 import logging
 import requests
 from auth import BACKEND_URL
@@ -51,14 +52,15 @@ class StreamWorker(QRunnable):
                     if line:
                         decoded = line.decode("utf-8")
                         if decoded.startswith("data: "):
-                            chunk = decoded[len("data: "):]
-                            if chunk == "[DONE]":
+                            payload = decoded[len("data: "):]
+                            if payload == "[DONE]":
                                 log.debug("Received [DONE] sentinel")
                                 break
-                            elif chunk.startswith("[INTERACTION_ID:"):
-                                new_id = chunk[len("[INTERACTION_ID:"):-1]
+                            elif payload.startswith("[INTERACTION_ID:"):
+                                new_id = payload[len("[INTERACTION_ID:"):-1]
                                 self.signals.interaction_id_received.emit(new_id)
                             else:
+                                chunk = json.loads(payload)
                                 self.signals.chunk_received.emit(chunk)
         except Exception as e:
             log.error(f"StreamWorker error: {e}", exc_info=True)
