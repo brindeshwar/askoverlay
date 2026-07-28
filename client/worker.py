@@ -16,6 +16,7 @@ class WorkerSignals(QObject):
 class StreamWorker(QRunnable):
     def __init__(self, message, auth_mode, credential, interaction_id=None):
         super().__init__()
+        self.setAutoDelete(False)
         self.message = message
         self.auth_mode = auth_mode
         self.credential = credential
@@ -77,6 +78,7 @@ class QuotaSignals(QObject):
 class QuotaCheckWorker(QRunnable):
     def __init__(self, auth_mode, credential):
         super().__init__()
+        self.setAutoDelete(False)
         self.auth_mode = auth_mode
         self.credential = credential
         self.signals = QuotaSignals()

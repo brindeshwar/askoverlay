@@ -73,6 +73,7 @@ class LoginSignals(QObject):
 class LoginWorker(QRunnable):
     def __init__(self):
         super().__init__()
+        self.setAutoDelete(False)
         self.signals = LoginSignals()
 
     @Slot()
@@ -117,18 +118,25 @@ class CheckoutSignals(QObject):
 class CheckoutWorker(QRunnable):
     def __init__(self, session_token):
         super().__init__()
+        self.setAutoDelete(False)
         self.session_token = session_token
         self.signals = CheckoutSignals()
 
     @Slot()
     def run(self):
+        log.info("CheckoutWorker.run() started")
         try:
             resp = req.post(f"{BACKEND_URL}/billing/checkout", headers={"X-Session-Token": self.session_token})
             resp.raise_for_status()
-            approve_url = resp.json()["approve_url"]
+            data = resp.json()
+            approve_url = data["approve_url"]
+            log.info(f"CheckoutWorker: about to emit success, url={approve_url}")
             self.signals.success.emit(approve_url)
+            log.info("CheckoutWorker: success signal emitted, returned normally")
         except Exception as e:
+            log.error(f"CheckoutWorker: exception: {e}", exc_info=True)
             self.signals.error.emit(str(e))
+        log.info("CheckoutWorker.run() finished")
 
 def determine_auth_mode():
     """

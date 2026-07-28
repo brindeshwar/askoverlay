@@ -35,6 +35,7 @@ logging.basicConfig(
 log = logging.getLogger("askoverlay.client")
 
 app = QApplication(sys.argv)
+app.setQuitOnLastWindowClosed(False)
 
 auth_mode, credential = determine_auth_mode()
 current_interaction_id = None
@@ -185,6 +186,7 @@ def start_upgrade():
     thread_pool.start(worker)
 
 def on_checkout_ready(approve_url):
+    log.info(f"on_checkout_ready called with url: {approve_url}")
     webbrowser.open(approve_url)
     add_system_message("Complete payment in your browser. Once done, you'll be Premium — just send another message.")
 
