@@ -14,7 +14,8 @@ from auth import (
     SERVICE_NAME,
     SESSION_TOKEN_KEY_NAME,
 )
-from ui import build_window, build_icon, build_tray_icon, show_first_run_dialog, show_quota_dialog, WINDOW_SIZE, ICON_SIZE
+from ui import build_window, build_icon, build_tray_icon, WINDOW_SIZE, ICON_SIZE
+from dialogs import show_first_run_dialog, show_quota_dialog
 from worker import StreamWorker, QuotaCheckWorker
 import keyring
 
