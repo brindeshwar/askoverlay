@@ -1,7 +1,8 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from database.connection import SessionLocal
+from sqlalchemy.orm import Session
+from database.connection import get_db
 from services.auth_service import (
     build_google_login_url,
     exchange_code_for_tokens,
@@ -26,7 +27,7 @@ class GoogleCallbackRequest(BaseModel):
 
 
 @router.post("/auth/google/callback")
-def google_callback(request: GoogleCallbackRequest):
+def google_callback(request: GoogleCallbackRequest, db: Session = Depends(get_db)):
     log.info("Received OAuth callback")
     try:
         tokens = exchange_code_for_tokens(request.code, request.redirect_uri)
@@ -43,12 +44,8 @@ def google_callback(request: GoogleCallbackRequest):
         log.error(f"Profile fetch failed: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to fetch profile: {str(e)}")
 
-    db = SessionLocal()
-    try:
-        user = upsert_user(db, profile, refresh_token)
-        session_token = create_session_token(user.id)
-    finally:
-        db.close()
+    user = upsert_user(db, profile, refresh_token)
+    session_token = create_session_token(user.id)
 
     log.info(f"Login complete for user_id={user.id}")
     return {"session_token": session_token, "email": user.email, "name": user.name}

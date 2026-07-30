@@ -1,7 +1,8 @@
 import logging
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse
-from database.connection import SessionLocal
+from sqlalchemy.orm import Session
+from database.connection import get_db
 from services.auth_service import verify_session_token
 from database.models import User
 from services.paypal_service import create_order, capture_order, verify_webhook_signature
@@ -28,7 +29,7 @@ def create_checkout(x_session_token: str = Header(...)):
 
 
 @router.post("/billing/webhook")
-async def billing_webhook(request: Request):
+async def billing_webhook(request: Request, db: Session = Depends(get_db)):
     body = await request.json()
     headers = request.headers
 
@@ -50,15 +51,11 @@ async def billing_webhook(request: Request):
                 raise
             log.info(f"Order {order_id} was already captured, skipping")
 
-        db = SessionLocal()
-        try:
-            user = db.query(User).filter(User.id == int(custom_id)).first()
-            if user:
-                user.tier = "premium"
-                db.commit()
-                log.info(f"User {user.id} upgraded to premium")
-        finally:
-            db.close()
+        user = db.query(User).filter(User.id == int(custom_id)).first()
+        if user:
+            user.tier = "premium"
+            db.commit()
+            log.info(f"User {user.id} upgraded to premium")
 
     return {"status": "ok"}
 
