@@ -1,0 +1,13 @@
+# Lint rules for the backend: pyflakes errors, pycodestyle errors, bugbear.
+line-length = 140
+target-version = "py312"
+extend-exclude = [".venv-backend"]
+
+[lint]
+select = ["E", "F", "B"]
+# B008: FastAPI declares dependencies and headers as call defaults (Depends(...), Header(...)) by design.
+ignore = ["B008"]
+
+[lint.per-file-ignores]
+# conftest must set DATABASE_URL before the app is imported, so its imports are deliberately not at the top.
+"tests/conftest.py" = ["E402"]
