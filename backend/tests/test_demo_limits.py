@@ -10,7 +10,7 @@ import main
 from database import connection
 from database.models import DailyUsage, Device
 from services import quota_service as quota
-from services.gemini_service import GeminiError
+from agent.errors import ChatError
 from services.quota_service import DemoDecision, DemoLimits
 
 
@@ -114,7 +114,7 @@ def test_caps_hold_under_concurrency(client, settings_override, fake_gemini):
 
 def test_upfront_gemini_failure_refunds_every_counter(client, settings_override, fake_gemini):
     settings_override(trust_forwarded_for=True)
-    fake_gemini.error = GeminiError(503, "Gemini is rate-limiting requests right now. Try again in a moment.")
+    fake_gemini.error = ChatError(503, "Gemini is rate-limiting requests right now. Try again in a moment.")
     device = new_device()
     assert chat(client, device, ip="203.0.113.60").status_code == 503
     assert device_usage(device) == 0

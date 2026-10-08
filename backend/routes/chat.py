@@ -2,12 +2,14 @@
 import logging
 from fastapi import APIRouter, Header, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from config import Settings, get_settings
 from database.connection import get_db
-from services.gemini_service import GeminiError, start_stream
+from agent.errors import ChatError
+from services.chat_service import start_chat_stream
 from services.quota_service import DemoDecision, DemoLimits, consume_demo_request, get_demo_usage, refund_demo_request
 
 log = logging.getLogger("askoverlay.chat")
@@ -17,15 +19,32 @@ router = APIRouter()
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 MAX_MESSAGE_CHARS = 8000
+MAX_HISTORY_TURNS = 40
+MAX_REQUEST_CHARS = 60_000  # message + history together; bounds the tokens one request can spend
 # Headers are untrusted input; bounding them keeps garbage out of the database.
 DeviceIdHeader = Header(default=None, min_length=8, max_length=64)
 
 
+class HistoryTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    # Past assistant replies can be long, so a turn is bounded only by the whole-request budget below.
+    content: str = Field(max_length=MAX_REQUEST_CHARS)
+
+
 class ChatRequest(BaseModel):
+    """The server keeps no conversation state: the client sends the turns so far with every request."""
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
-    interaction_id: str | None = Field(default=None, max_length=256)
+    history: list[HistoryTurn] = Field(default_factory=list, max_length=MAX_HISTORY_TURNS)
+
+    @model_validator(mode="after")
+    def bounded_total_size(self):
+        total = len(self.message) + sum(len(turn.content) for turn in self.history)
+        if total > MAX_REQUEST_CHARS:
+            raise ValueError(f"conversation too large ({total} characters, limit {MAX_REQUEST_CHARS})")
+        return self
 
 
 def client_ip(request: Request, settings: Settings) -> str:
@@ -43,15 +62,10 @@ def client_ip(request: Request, settings: Settings) -> str:
 
 
 async def _stream(api_key: str, request: ChatRequest, settings: Settings) -> StreamingResponse:
+    history = [(turn.role, turn.content) for turn in request.history]
     try:
-        lines = await start_stream(
-            api_key,
-            settings.gemini_model,
-            request.message,
-            request.interaction_id,
-            settings.gemini_timeout_seconds,
-        )
-    except GeminiError as e:
+        lines = await start_chat_stream(api_key, history, request.message, settings)
+    except ChatError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail) from e
     return StreamingResponse(lines, media_type="text/event-stream", headers=SSE_HEADERS)
 

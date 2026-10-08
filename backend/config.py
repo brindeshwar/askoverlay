@@ -14,8 +14,11 @@ class Settings(BaseSettings):
     # Key the backend spends on demo traffic. Optional: without it BYOK still works
     # and the demo path answers 503 instead of crashing.
     backend_gemini_key: str | None = None
+    # Primary model, and an optional fallback used when the primary fails transiently
+    # (rate limit, 5xx, timeout) before the user has seen any text. Empty string disables it.
     gemini_model: str = "gemini-3.5-flash-lite"
-    gemini_timeout_seconds: float = Field(default=60, gt=0)
+    gemini_fallback_model: str = "gemini-3.1-flash-lite"
+    gemini_timeout_seconds: float = Field(default=30, gt=0)  # per model call
 
     # Demo caps. The device cap is a fairness limit (device ids are client-generated and
     # forgeable); the per-IP and global daily caps are what actually bound abuse and spend.

@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi.testclient import TestClient
 
 import main
-from services.gemini_service import GeminiError
+from agent.errors import ChatError
 
 
 def device():
@@ -49,12 +49,9 @@ def test_demo_cap_holds_under_concurrency(client, fake_gemini):
     assert codes.count(429) == 27
 
 
-def test_demo_uses_backend_key_and_configured_model(client, fake_gemini):
+def test_demo_uses_the_backend_key(client, fake_gemini):
     post(client, device())
-    call = fake_gemini.calls[0]
-    assert call["api_key"] == "backend-key"
-    assert call["model"] == "gemini-3.5-flash-lite"
-    assert call["timeout"] == 60
+    assert fake_gemini.calls[0]["api_key"] == "backend-key"
 
 
 def test_demo_without_backend_key_is_503(client, settings_override, fake_gemini):
@@ -76,9 +73,22 @@ def test_byok_wins_over_device_header_and_leaves_counter_alone(client, fake_gemi
     assert client.get("/quota/status", headers=headers).json()["used"] == 0
 
 
-def test_interaction_id_is_forwarded(client, fake_gemini):
-    post(client, {"X-Gemini-Key": "k"}, interaction_id="prev-1")
-    assert fake_gemini.calls[0]["previous"] == "prev-1"
+def test_history_is_forwarded_as_role_text_pairs(client, fake_gemini):
+    turns = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+    post(client, {"X-Gemini-Key": "k"}, history=turns, message="and now?")
+    call = fake_gemini.calls[0]
+    assert call["history"] == [("user", "hi"), ("assistant", "hello")]
+    assert call["message"] == "and now?"
+
+
+def test_a_long_past_assistant_reply_is_accepted_in_history(client, fake_gemini):
+    long_reply = [{"role": "assistant", "content": "y" * 20_000}]  # replies can exceed the 8000-char message limit
+    assert post(client, {"X-Gemini-Key": "k"}, history=long_reply).status_code == 200
+
+
+def test_history_is_optional(client, fake_gemini):
+    assert post(client, {"X-Gemini-Key": "k"}).status_code == 200
+    assert fake_gemini.calls[0]["history"] == []
 
 
 def test_stream_response_is_sse(client, fake_gemini):
@@ -88,7 +98,7 @@ def test_stream_response_is_sse(client, fake_gemini):
 
 
 def test_upfront_gemini_failure_becomes_a_real_status(client, fake_gemini):
-    fake_gemini.error = GeminiError(503, "Gemini is rate-limiting requests right now. Try again in a moment.")
+    fake_gemini.error = ChatError(503, "Gemini is rate-limiting requests right now. Try again in a moment.")
     r = post(client, {"X-Gemini-Key": "k"})
     assert r.status_code == 503
     assert "rate-limiting" in r.json()["detail"]
@@ -99,7 +109,11 @@ def test_input_validation(client, fake_gemini):
     assert post(client, byok, message="").status_code == 422
     assert post(client, byok, message="   ").status_code == 422
     assert post(client, byok, message="x" * 8001).status_code == 422
-    assert post(client, byok, interaction_id="i" * 257).status_code == 422
+    assert post(client, byok, history=[{"role": "system", "content": "x"}]).status_code == 422  # only user/assistant
+    assert post(client, byok, history=[{"role": "user", "content": "x"}] * 41).status_code == 422  # too many turns
+    big = [{"role": "user", "content": "x" * 8000}] * 8  # each is fine, together they exceed the request budget
+    assert post(client, byok, history=big).status_code == 422
+    assert post(client, byok, history=[{"role": "user", "content": "x" * 60_001}]).status_code == 422
     assert post(client, {"X-Device-Id": "short"}).status_code == 422
     assert post(client, {"X-Device-Id": "d" * 65}).status_code == 422
     assert fake_gemini.calls == []

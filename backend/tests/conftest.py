@@ -11,11 +11,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 
 import main
+from agent.errors import ChatError
 from config import Settings, get_settings
 from database import connection
 from database.models import DailyUsage, Device
 from routes import chat as chat_module
-from services.gemini_service import GeminiError
 
 
 def make_settings(**overrides) -> Settings:
@@ -53,26 +53,25 @@ def client(settings_override):
 
 @pytest.fixture
 def fake_gemini(monkeypatch):
-    """Replace the Gemini call. Records each call; set .error to make it fail up front."""
+    """Replace the LLM call. Records each call; set .error to make it fail up front."""
 
     class Fake:
         calls: list
-        error: GeminiError | None = None
+        error: ChatError | None = None
 
     fake = Fake()
     fake.calls = []
 
-    async def fake_start_stream(api_key, model, message, previous_interaction_id, timeout_seconds):
-        fake.calls.append(dict(api_key=api_key, model=model, message=message, previous=previous_interaction_id, timeout=timeout_seconds))
+    async def fake_start_chat_stream(api_key, history, message, settings):
+        fake.calls.append(dict(api_key=api_key, history=history, message=message, model=settings.gemini_model))
         if fake.error:
             raise fake.error
 
         async def lines():
             yield 'data: "hello"\n\n'
-            yield "data: [INTERACTION_ID:abc]\n\n"
             yield "data: [DONE]\n\n"
 
         return lines()
 
-    monkeypatch.setattr(chat_module, "start_stream", fake_start_stream)
+    monkeypatch.setattr(chat_module, "start_chat_stream", fake_start_chat_stream)
     return fake
