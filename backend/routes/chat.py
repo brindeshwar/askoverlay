@@ -1,24 +1,20 @@
 # backend/routes/chat
 import logging
-from datetime import date
 import os
 from fastapi import APIRouter, Header, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database.connection import get_db
-from database.models import User, Device
 from services.gemini_service import stream_gemini_response
-from services.quota_service import check_and_increment_quota, check_and_increment_user_quota
-from services.auth_service import verify_session_token
+from services.quota_service import DEMO_REQUEST_LIMIT, check_and_increment_quota, get_demo_usage
 
 log = logging.getLogger("askoverlay.chat")
 
 router = APIRouter()
 
 BACKEND_GEMINI_KEY = os.getenv("BACKEND_GEMINI_KEY")
-TIERED_MODEL = "gemini-2.5-flash-lite"
-BYOK_MODEL = "gemini-3.5-flash"
+MODEL = "gemini-3.5-flash-lite"
 
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -28,54 +24,33 @@ class ChatRequest(BaseModel):
     interaction_id: str | None = None
 
 
+def _stream(api_key: str, request: ChatRequest) -> StreamingResponse:
+    return StreamingResponse(
+        stream_gemini_response(api_key, MODEL, request.message, request.interaction_id),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
+
+
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
     x_gemini_key: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
-    x_session_token: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     if x_gemini_key:
         log.info("Routing: BYOK path")
-        return StreamingResponse(
-            stream_gemini_response(x_gemini_key, BYOK_MODEL, request.message, request.interaction_id),
-            media_type="text/event-stream",
-            headers=SSE_HEADERS,
-        )
-
-    if x_session_token:
-        log.info("Routing: session (logged-in) path")
-        user_id = verify_session_token(x_session_token)
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid or expired session token.")
-
-        user = db.query(User).filter(User.id == user_id).first()
-        if user is None:
-            raise HTTPException(status_code=404, detail="User not found.")
-        allowed = check_and_increment_user_quota(db, user)
-
-        if not allowed:
-            raise HTTPException(status_code=429, detail="Daily limit reached. Upgrade to Premium for more, or come back tomorrow.")
-
-        return StreamingResponse(
-            stream_gemini_response(BACKEND_GEMINI_KEY, TIERED_MODEL, request.message, request.interaction_id),
-            media_type="text/event-stream",
-            headers=SSE_HEADERS,
-        )
+        return _stream(x_gemini_key, request)
 
     if x_device_id:
-        log.info("Routing: anonymous device path")
-        allowed = check_and_increment_quota(db, x_device_id)
-
-        if not allowed:
-            raise HTTPException(status_code=429, detail="Daily free limit reached. Come back tomorrow, or add your own Gemini API key for unlimited use.")
-
-        return StreamingResponse(
-            stream_gemini_response(BACKEND_GEMINI_KEY, TIERED_MODEL, request.message, request.interaction_id),
-            media_type="text/event-stream",
-            headers=SSE_HEADERS,
-        )
+        log.info("Routing: demo (device) path")
+        if not check_and_increment_quota(db, x_device_id):
+            raise HTTPException(
+                status_code=429,
+                detail=f"Demo limit reached ({DEMO_REQUEST_LIMIT} requests). Add your own Gemini API key to keep using AskOverlay.",
+            )
+        return _stream(BACKEND_GEMINI_KEY, request)
 
     log.warning("Chat request with no valid auth header")
     raise HTTPException(status_code=400, detail="Missing X-Gemini-Key or X-Device-Id header.")
@@ -84,23 +59,9 @@ async def chat(
 @router.get("/quota/status")
 def quota_status(
     x_device_id: str | None = Header(default=None),
-    x_session_token: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    if x_session_token:
-        user_id = verify_session_token(x_session_token)
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid session token.")
-        user = db.query(User).filter(User.id == user_id).first()
-        if user is None:
-            raise HTTPException(status_code=404, detail="User not found.")
-        limit = 100 if user.tier == "premium" else 10
-        used = user.request_count if user.last_reset_date == date.today() else 0
-        return {"mode": user.tier, "used": used, "limit": limit}
-
     if x_device_id:
-        device = db.query(Device).filter(Device.device_id == x_device_id).first()
-        used = device.request_count if device and device.last_reset_date == date.today() else 0
-        return {"mode": "free", "used": used, "limit": 10}
+        return {"mode": "demo", "used": get_demo_usage(db, x_device_id), "limit": DEMO_REQUEST_LIMIT}
 
     return {"mode": "byok", "used": None, "limit": None}

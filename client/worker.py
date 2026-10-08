@@ -28,8 +28,6 @@ class StreamWorker(QRunnable):
         headers = {}
         if self.auth_mode == "byok":
             headers["X-Gemini-Key"] = self.credential
-        elif self.auth_mode == "session":
-            headers["X-Session-Token"] = self.credential
         elif self.auth_mode == "device":
             headers["X-Device-Id"] = self.credential
 
@@ -86,9 +84,7 @@ class QuotaCheckWorker(QRunnable):
     @Slot()
     def run(self):
         headers = {}
-        if self.auth_mode == "session":
-            headers["X-Session-Token"] = self.credential
-        elif self.auth_mode == "device":
+        if self.auth_mode == "device":
             headers["X-Device-Id"] = self.credential
 
         try:

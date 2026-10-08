@@ -2,22 +2,16 @@ import sys
 import os
 import ctypes
 import logging
-import webbrowser
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QThreadPool
 from auth import (
     determine_auth_mode,
     get_or_create_device_id,
     get_or_prompt_api_key,
-    LoginWorker,
-    CheckoutWorker,
-    SERVICE_NAME,
-    SESSION_TOKEN_KEY_NAME,
 )
 from ui import build_window, build_icon, build_tray_icon, WINDOW_SIZE, ICON_SIZE
 from dialogs import show_first_run_dialog, show_quota_dialog
 from worker import StreamWorker, QuotaCheckWorker
-import keyring
 
 if sys.platform == "win32":
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("askoverlay.client.v1")
@@ -47,17 +41,13 @@ if auth_mode is None:
     if choice == "try":
         credential = get_or_create_device_id()
         auth_mode = "device"
-    elif choice == "login":
-        session_token = keyring.get_password("AskOverlay", "session_token")
-        auth_mode = "session"
-        credential = session_token
+    elif choice == "byok":
+        credential = get_or_prompt_api_key()
+        auth_mode = "byok"
     else:
         sys.exit(0)
 
-window, add_user_message, add_assistant_message, add_system_message, input_field, send_button, login_button, usage_label, minimize_button = build_window(ICON_PATH)
-if auth_mode == "session":
-    login_button.setText("✓ Signed in")
-    login_button.setEnabled(False)
+window, add_user_message, add_assistant_message, add_system_message, input_field, send_button, usage_label, minimize_button = build_window(ICON_PATH)
 
 def show_chat_window():
     icon_pos = icon_widget.pos()
@@ -132,13 +122,9 @@ def on_error(error_msg):
 def on_quota_exceeded(detail_message):
     log.info(f"Quota exceeded: {detail_message}")
     send_button.setEnabled(True)
-    choice = show_quota_dialog(auth_mode, detail_message)
+    choice = show_quota_dialog(detail_message)
 
-    if choice == "login":
-        on_login()
-    elif choice == "upgrade":
-        start_upgrade()
-    elif choice == "byok":
+    if choice == "byok":
         start_byok_setup()
 
 def on_finished():
@@ -147,59 +133,12 @@ def on_finished():
     send_button.setEnabled(True)
     refresh_usage_indicator()
 
-def on_login():
-    login_button.setEnabled(False)
-    login_button.setText("Logging in...")
-    worker = LoginWorker()
-    _track(worker)
-    worker.signals.success.connect(on_login_success)
-    worker.signals.success.connect(lambda *_: _untrack(worker))
-    worker.signals.error.connect(on_login_error)
-    worker.signals.error.connect(lambda *_: _untrack(worker))
-    thread_pool.start(worker)
-
-def on_login_success(email, name):
-    global auth_mode, credential
-    log.info(f"Login successful: {email}")
-    session_token = keyring.get_password("AskOverlay", "session_token")
-    auth_mode = "session"
-    credential = session_token
-    login_button.setText(f"✓ {name.split()[0]}")
-    login_button.setEnabled(False)
-    refresh_usage_indicator()
-
-def on_login_error(error_msg):
-    log.error(f"Login failed: {error_msg}")
-    login_button.setText("Login")
-    login_button.setEnabled(True)
-    add_system_message(f"Login error: {error_msg}")
-
-def start_upgrade():
-    if auth_mode != "session":
-        add_system_message("Upgrade requires signing in first.")
-        return
-    worker = CheckoutWorker(credential)
-    _track(worker)
-    worker.signals.success.connect(on_checkout_ready)
-    worker.signals.success.connect(lambda *_: _untrack(worker))
-    worker.signals.error.connect(on_checkout_error)
-    worker.signals.error.connect(lambda *_: _untrack(worker))
-    thread_pool.start(worker)
-
-def on_checkout_ready(approve_url):
-    log.info(f"on_checkout_ready called with url: {approve_url}")
-    webbrowser.open(approve_url)
-    add_system_message("Complete payment in your browser. Once done, you'll be Premium — just send another message.")
-
-def on_checkout_error(error_msg):
-    log.error(f"Checkout failed: {error_msg}")
-    add_system_message(f"Upgrade error: {error_msg}")
-
 def start_byok_setup():
-    global auth_mode, credential
+    global auth_mode, credential, current_interaction_id
     api_key = get_or_prompt_api_key()
     auth_mode = "byok"
     credential = api_key
+    current_interaction_id = None  # conversation ids belong to the key that created them
     add_system_message("Switched to your own Gemini API key. You now have unlimited usage.")
     refresh_usage_indicator()
 
@@ -219,14 +158,13 @@ def on_quota_status(mode, used, limit):
     if used is None or limit is None:
         usage_label.setText("")
     else:
-        usage_label.setText(f"{used}/{limit} requests today ({mode})")
+        usage_label.setText(f"Demo: {used}/{limit} requests used")
 
 def on_interaction_id_received(new_id):
     global current_interaction_id
     current_interaction_id = new_id
     log.debug(f"Session interaction ID updated: {new_id}")
 
-login_button.clicked.connect(on_login)
 send_button.clicked.connect(on_send)
 input_field.returnPressed.connect(on_send)
 

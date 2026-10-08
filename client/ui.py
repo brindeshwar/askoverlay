@@ -85,15 +85,11 @@ def build_window(icon_path):
 
     layout = QVBoxLayout()
 
-    login_button = QPushButton("Login")
-    login_button.setFixedSize(90, 24)
-
     minimize_button = QPushButton("—")
     minimize_button.setFixedSize(24, 24)
 
     top_bar = QHBoxLayout()
     top_bar.addStretch()
-    top_bar.addWidget(login_button)
     top_bar.addWidget(minimize_button)
 
     usage_label = QLabel("")
@@ -195,7 +191,7 @@ def build_window(icon_path):
 
     return (
         window, add_user_message, add_assistant_message, add_system_message,
-        input_field, send_button, login_button, usage_label, minimize_button
+        input_field, send_button, usage_label, minimize_button
     )
 
 

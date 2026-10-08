@@ -1,64 +1,20 @@
-from auth import LoginWorker
-from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
 
 
 def show_first_run_dialog():
+    """Returns "try" (demo mode), "byok" (own key), or None if the dialog is closed."""
     dialog = QDialog()
     dialog.setWindowTitle("Welcome to AskOverlay")
     dialog.setFixedSize(320, 160)
 
     layout = QVBoxLayout()
-    status_label = QLabel("Get started:")
-    layout.addWidget(status_label)
+    layout.addWidget(QLabel("Get started:"))
 
-    try_button = QPushButton("Try for free (no signup)")
-    login_button = QPushButton("Sign in with Google")
+    try_button = QPushButton("Try the demo (10 free requests)")
+    byok_button = QPushButton("Use my own Gemini API key")
     layout.addWidget(try_button)
-    layout.addWidget(login_button)
+    layout.addWidget(byok_button)
     dialog.setLayout(layout)
-
-    result = {"choice": None}
-    thread_pool = QThreadPool()
-
-    def choose_try():
-        result["choice"] = "try"
-        dialog.accept()
-
-    def start_login():
-        try_button.setEnabled(False)
-        login_button.setEnabled(False)
-        status_label.setText("Opening browser — complete sign-in there...")
-
-        worker = LoginWorker()
-        worker.signals.success.connect(on_success)
-        worker.signals.error.connect(on_error)
-        thread_pool.start(worker)
-
-    def on_success(email, name):
-        result["choice"] = "login"
-        status_label.setText(f"Signed in as {name}.")
-        dialog.accept()
-
-    def on_error(error_msg):
-        status_label.setText(f"Sign-in failed: {error_msg}")
-        try_button.setEnabled(True)
-        login_button.setEnabled(True)
-
-    try_button.clicked.connect(choose_try)
-    login_button.clicked.connect(start_login)
-
-    dialog.exec()
-    return result["choice"]
-
-
-def show_quota_dialog(auth_mode, detail_message):
-    dialog = QDialog()
-    dialog.setWindowTitle("Limit Reached")
-    dialog.setFixedSize(320, 160)
-
-    layout = QVBoxLayout()
-    layout.addWidget(QLabel(detail_message))
 
     result = {"choice": None}
 
@@ -66,14 +22,29 @@ def show_quota_dialog(auth_mode, detail_message):
         result["choice"] = value
         dialog.accept()
 
-    if auth_mode == "device":
-        login_btn = QPushButton("Sign in with Google")
-        login_btn.clicked.connect(lambda: pick("login"))
-        layout.addWidget(login_btn)
-    elif auth_mode == "session":
-        upgrade_btn = QPushButton("Upgrade to Premium")
-        upgrade_btn.clicked.connect(lambda: pick("upgrade"))
-        layout.addWidget(upgrade_btn)
+    try_button.clicked.connect(lambda: pick("try"))
+    byok_button.clicked.connect(lambda: pick("byok"))
+
+    dialog.exec()
+    return result["choice"]
+
+
+def show_quota_dialog(detail_message):
+    """Returns "byok" if the user wants to add their own key, else None."""
+    dialog = QDialog()
+    dialog.setWindowTitle("Demo Limit Reached")
+    dialog.setFixedSize(320, 160)
+
+    layout = QVBoxLayout()
+    label = QLabel(detail_message)
+    label.setWordWrap(True)
+    layout.addWidget(label)
+
+    result = {"choice": None}
+
+    def pick(value):
+        result["choice"] = value
+        dialog.accept()
 
     byok_btn = QPushButton("Use your own Gemini API key")
     byok_btn.clicked.connect(lambda: pick("byok"))
