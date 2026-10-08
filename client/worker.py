@@ -22,16 +22,15 @@ class WorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
     quota_exceeded = Signal(str)
-    interaction_id_received = Signal(str)
 
 class StreamWorker(QRunnable):
-    def __init__(self, message, auth_mode, credential, interaction_id=None):
+    def __init__(self, message, history, auth_mode, credential):
         super().__init__()
         self.setAutoDelete(False)
         self.message = message
         self.auth_mode = auth_mode
         self.credential = credential
-        self.interaction_id = interaction_id
+        self.history = history
         self.signals = WorkerSignals()
 
     @Slot()
@@ -45,7 +44,7 @@ class StreamWorker(QRunnable):
         try:
             with requests.post(
                 f"{BACKEND_URL}/chat",
-                json={"message": self.message, "interaction_id": self.interaction_id},
+                json={"message": self.message, "history": self.history},
                 headers=headers,
                 stream=True,
                 timeout=(10, None)
@@ -72,9 +71,12 @@ class StreamWorker(QRunnable):
                             if payload == "[DONE]":
                                 log.debug("Received [DONE] sentinel")
                                 break
-                            elif payload.startswith("[INTERACTION_ID:"):
-                                new_id = payload[len("[INTERACTION_ID:"):-1]
-                                self.signals.interaction_id_received.emit(new_id)
+                            elif payload.startswith("[ERROR: "):
+                                # A raw control frame; model text is always JSON-quoted, so no collision.
+                                message = payload[len("[ERROR: "):].rstrip("]")
+                                log.error(f"Stream error frame: {message}")
+                                self.signals.error.emit(message)
+                                break
                             else:
                                 chunk = json.loads(payload)
                                 self.signals.chunk_received.emit(chunk)

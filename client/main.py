@@ -12,6 +12,7 @@ from auth import (
 from ui import build_window, build_icon, build_tray_icon, WINDOW_SIZE, ICON_SIZE
 from dialogs import show_first_run_dialog, show_quota_dialog
 from worker import StreamWorker, QuotaCheckWorker
+from history import trim_history, remember_exchange
 
 if sys.platform == "win32":
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("askoverlay.client.v1")
@@ -33,8 +34,12 @@ app = QApplication(sys.argv)
 app.setQuitOnLastWindowClosed(False)
 
 auth_mode, credential = determine_auth_mode()
-current_interaction_id = None
 current_assistant_bubble = None
+
+# The server keeps no conversation state, so the client holds the finished turns and sends them with each request.
+conversation = []
+pending_user_message = ""
+stream_failed = False
 
 if auth_mode is None:
     choice = show_first_run_dialog()
@@ -89,7 +94,7 @@ def _untrack(worker):
 
 # ── Slots ──────────────────────────────────────────────────────────────────
 def on_send():
-    global current_assistant_bubble
+    global current_assistant_bubble, pending_user_message, stream_failed
     user_message = input_field.text()
     if not user_message.strip():
         return
@@ -100,15 +105,16 @@ def on_send():
     send_button.setEnabled(False)
 
     current_assistant_bubble = add_assistant_message()
+    pending_user_message = user_message
+    stream_failed = False
 
-    worker = StreamWorker(user_message, auth_mode, credential, current_interaction_id)
+    worker = StreamWorker(user_message, trim_history(conversation), auth_mode, credential)
     _track(worker)
     worker.signals.quota_exceeded.connect(on_quota_exceeded)
     worker.signals.chunk_received.connect(append_chunk)
     worker.signals.error.connect(on_error)
     worker.signals.finished.connect(on_finished)
     worker.signals.finished.connect(lambda: _untrack(worker))
-    worker.signals.interaction_id_received.connect(on_interaction_id_received)
 
     thread_pool.start(worker)
 
@@ -116,10 +122,14 @@ def append_chunk(chunk):
     current_assistant_bubble.append(chunk)
 
 def on_error(error_msg):
+    global stream_failed
+    stream_failed = True
     log.error(f"UI received error signal: {error_msg}")
     add_system_message(f"Error: {error_msg}")
 
 def on_quota_exceeded(detail_message):
+    global stream_failed
+    stream_failed = True
     log.info(f"Quota exceeded: {detail_message}")
     send_button.setEnabled(True)
     choice = show_quota_dialog(detail_message)
@@ -130,15 +140,17 @@ def on_quota_exceeded(detail_message):
 def on_finished():
     log.info("Stream finished, re-enabling send button")
     current_assistant_bubble.finalize()
+    # Only a complete, error-free exchange becomes part of the conversation.
+    if not stream_failed and current_assistant_bubble.buffer.strip():
+        remember_exchange(conversation, pending_user_message, current_assistant_bubble.buffer)
     send_button.setEnabled(True)
     refresh_usage_indicator()
 
 def start_byok_setup():
-    global auth_mode, credential, current_interaction_id
+    global auth_mode, credential
     api_key = get_or_prompt_api_key()
     auth_mode = "byok"
     credential = api_key
-    current_interaction_id = None  # conversation ids belong to the key that created them
     add_system_message("Switched to your own Gemini API key. You now have unlimited usage.")
     refresh_usage_indicator()
 
@@ -159,11 +171,6 @@ def on_quota_status(mode, used, limit):
         usage_label.setText("")
     else:
         usage_label.setText(f"Demo: {used}/{limit} requests used")
-
-def on_interaction_id_received(new_id):
-    global current_interaction_id
-    current_interaction_id = new_id
-    log.debug(f"Session interaction ID updated: {new_id}")
 
 send_button.clicked.connect(on_send)
 input_field.returnPressed.connect(on_send)
