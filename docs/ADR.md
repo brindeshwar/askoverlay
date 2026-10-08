@@ -84,7 +84,7 @@ registration endpoint can mint tokens exactly as easily as ids.
 shared IP share the IP cap. All limits are configuration, not code.
 
 ## ADR-0007: LangGraph for the agent; the client holds conversation history
-Status: **Proposed - spike complete, model choice pending** - 2026-10-09
+Status: **Proposed - spike and benchmark complete; default-model decision pending the owner** - 2026-10-09
 
 **Context.** The owner wants LangChain/LangGraph. ADR-0001's server-side memory conflicts with removing
 accounts and with privacy (chats stored outside our control), so history moves to the client: each
@@ -103,16 +103,27 @@ screen question, no tool call for a non-screen question, image inside a ToolMess
 user message (fallback), full LangGraph run with a streamed answer, and a stateless run with
 client-supplied history.
 
-| Model | Result | Time to first token (small sample) |
-|---|---|---|
-| `gemini-3.5-flash-lite` | 9/9 | 4-17 s, highly variable |
-| `gemini-3.1-flash-lite` | 8/9 (the miss: answered "Ping" to "reply with exactly one word: pong") | about 1.5 s, steady |
-| `gemini-3.5-flash` | not run | about 4 s |
-| `gemini-3.8-flash` | not run | 6-9 s |
+Follow-up benchmark, same day: 12 interleaved rounds (so a slow period hits every model equally), two
+workloads per model - a short text prompt and the product-critical "read the error code from this
+screenshot" prompt - on the free-tier backend key. Times are seconds to first streamed token.
 
-The same latency appeared on the current Interactions API path (11 s and 47 s on one run), so the cause
-is the API/key tier, not LangChain, and `thinking_level` made no difference. The sample is small (2-3
-calls per model on a free-tier key) and needs a proper measurement before choosing.
+| Model | Text median / p90 | Vision median / p90 | Failures (of 24) | Vision accuracy |
+|---|---|---|---|---|
+| `gemini-3.1-flash-lite` | 1.5 / 8.6 | 1.7 / 3.9 | 0 | 12/12 |
+| `gemini-3.5-flash-lite` | 7.1 / 10.9 | 8.4 / 16.3 | 0 | 12/12 |
+| `gemini-3.5-flash` | 3.3 / 10.1 | 2.3 / 3.4 | 5 (HTTP 429) | 9/9 |
+| `gemini-3.8-flash` | 20.5 / 65.9 | 4.4 / 6.0 | 13 (HTTP 429) | 5/5 |
+
+Reading it: both lite models were 100% accurate and reliable on this key, but `3.5-flash-lite` was about
+4-5x slower to first token than `3.1-flash-lite` (the earlier Interactions API timings of 11 s and 47 s
+fit this pattern, so LangChain is not the cause, and `thinking_level` made no difference). The two
+larger models are fast when they answer but hit free-tier quota limits, so they are unusable for a
+backend-funded demo. Caveats: n = 12 per cell, one day, one free-tier key; latency on a free tier can
+shift with load, and this run consumed part of that day's quota for the larger models.
+
+**Recommendation.** Default to `gemini-3.1-flash-lite` for interactive use (the model is a config value,
+`GEMINI_MODEL`, so this is a one-line change); keep `gemini-3.5-flash-lite` as an option. Re-measure on a
+paid key before promising anything about production latency.
 
 **Known risks.** `langchain-google-genai` pulls a much newer `google-genai` (2.29) than the backend pins
 (2.10); the migration replaces the direct SDK dependency. Earlier reports of Gemini 3 thought-signature
@@ -122,5 +133,5 @@ errors on tool calls did not reproduce here, but the area is fast-moving: pin ve
 products; if so, screenshots sent through the free demo key contradict "never stored". Check the current
 terms before making that claim, or send screenshots only on BYOK / a paid key.
 
-**Next.** Choose the default model with a larger latency/quality measurement; then port `/chat` to the
-graph, with images stripped from history before it is returned to the client.
+**Next.** Owner picks the default model; then port `/chat` to the graph, with images stripped from
+history before it is returned to the client.
