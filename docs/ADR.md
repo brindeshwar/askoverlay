@@ -6,8 +6,8 @@ followed. Newest decisions last. Dates are when the decision was recorded.
 ---
 
 ## ADR-0001: Single LLM seam via the Gemini Interactions API
-Status: **Superseded in part by ADR-0007** (the single seam stays; the Interactions API and
-server-side memory are replaced) - 2026-10-05
+Status: **Superseded in part by ADR-0007** (the single seam stays, now `services/chat_service.py`; the
+Interactions API and server-side memory are replaced) - 2026-10-05
 
 All LLM access goes through one module (`services/gemini_service.py`), using the Interactions API with
 streaming and `previous_interaction_id` for server-side memory. Good for V1: memory for free, one place
@@ -84,7 +84,7 @@ registration endpoint can mint tokens exactly as easily as ids.
 shared IP share the IP cap. All limits are configuration, not code.
 
 ## ADR-0007: LangGraph for the agent; the client holds conversation history
-Status: **Proposed - spike and benchmark complete; default-model decision pending the owner** - 2026-10-09
+Status: **Accepted and implemented** (default models chosen by the owner) - 2026-10-09
 
 **Context.** The owner wants LangChain/LangGraph. ADR-0001's server-side memory conflicts with removing
 accounts and with privacy (chats stored outside our control), so history moves to the client: each
@@ -133,5 +133,27 @@ errors on tool calls did not reproduce here, but the area is fast-moving: pin ve
 products; if so, screenshots sent through the free demo key contradict "never stored". Check the current
 terms before making that claim, or send screenshots only on BYOK / a paid key.
 
-**Next.** Owner picks the default model; then port `/chat` to the graph, with images stripped from
-history before it is returned to the client.
+**Decision (owner).** Primary `gemini-3.5-flash-lite`, fallback `gemini-3.1-flash-lite`, both configurable
+(`GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`). The benchmark above recommended the reverse order for speed;
+the owner kept 3.5 as primary, and the fallback also covers its slow tail only on failures (rate limit,
+5xx, timeout), not on slowness alone. Revisit with a latency-triggered fallback or a swap if first-token
+times hurt in practice.
+
+**Implemented.**
+- `agent/graph.py`: `primary -> (answered | transient failure and nothing shown yet -> fallback)`. Failover
+  happens only if the user has seen no text; a failure after text was shown surfaces in-band, because a
+  second model would restart the answer and the user would read it twice. Reasoning-only output does not
+  count as shown.
+- `agent/errors.py`: failures classified with LangChain's provider-neutral exception types. Bad key or
+  request means no fallback (it would fail identically). Library retries are off for the primary and one
+  for the fallback, because the library's backoff waits tens of seconds on a 429.
+- `services/chat_service.py`: runs the graph until the first visible text before returning, so up-front
+  failures become real HTTP statuses. Errors after streaming starts use a raw `[ERROR: ...]` frame that
+  cannot be confused with JSON-quoted model text.
+- Models are built per request in closures, not graph config, since config can reach tracing metadata and
+  the models hold the caller's API key.
+- Verified live: streaming, memory carried by the client, invalid key -> 400, and 5/5 real failovers
+  when the primary was genuinely rate-limited.
+
+**Next.** `read_screen` tool node (V1.1); the screenshot must be removed from the history returned to
+the client.

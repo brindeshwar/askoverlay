@@ -24,12 +24,14 @@ jobs:
       - run: pytest -q
 
   client:
-    name: Client (syntax check)
+    name: Client (syntax check + history tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # The GUI needs a desktop session, so CI only proves the client files still parse.
+      # The GUI needs a desktop session, so CI only proves the client files parse and tests its pure logic.
       - run: python -m compileall -q client
+      - run: pip install pytest==9.1.1
+      - run: pytest -q client/tests
