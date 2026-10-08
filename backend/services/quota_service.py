@@ -1,12 +1,10 @@
 import logging
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from database.connection import SessionLocal
 from database.models import Device
 
 log = logging.getLogger("askoverlay.quota")
-
-# Lifetime cap per device for the backend-funded demo. No daily reset.
-DEMO_REQUEST_LIMIT = 10
 
 
 def get_demo_usage(db: Session, device_id: str) -> int:
@@ -14,8 +12,8 @@ def get_demo_usage(db: Session, device_id: str) -> int:
     return device.request_count if device else 0
 
 
-def check_and_increment_quota(db: Session, device_id: str) -> bool:
-    """Consume one demo request for this device. Returns False if the lifetime cap is reached.
+def check_and_increment_quota(db: Session, device_id: str, limit: int) -> bool:
+    """Consume one demo request for this device. Returns False once the lifetime cap is reached.
 
     The increment is a single conditional UPDATE, so concurrent requests cannot
     push the counter past the limit (no read-modify-write race).
@@ -30,7 +28,7 @@ def check_and_increment_quota(db: Session, device_id: str) -> bool:
 
     updated = (
         db.query(Device)
-        .filter(Device.device_id == device_id, Device.request_count < DEMO_REQUEST_LIMIT)
+        .filter(Device.device_id == device_id, Device.request_count < limit)
         .update({Device.request_count: Device.request_count + 1}, synchronize_session=False)
     )
     db.commit()
@@ -39,3 +37,14 @@ def check_and_increment_quota(db: Session, device_id: str) -> bool:
         log.info("Demo quota exhausted for a device")
         return False
     return True
+
+
+def consume_demo_request(device_id: str, limit: int) -> bool:
+    """Run the quota check in its own short-lived session.
+
+    /chat streams for seconds; holding a request-scoped session open for the whole
+    stream would pin a DB connection for no reason, so the session lives only for
+    this call.
+    """
+    with SessionLocal() as db:
+        return check_and_increment_quota(db, device_id, limit)

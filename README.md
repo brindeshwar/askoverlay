@@ -47,6 +47,7 @@ Built as a portfolio project demonstrating full-stack AI application development
 |---|---|---|---|
 | `/chat` | POST | `X-Gemini-Key` \| `X-Device-Id` | Streams a Gemini response via SSE |
 | `/quota/status` | GET | `X-Device-Id` | Returns demo usage + limit |
+| `/health` | GET | — | Liveness plus a database round-trip |
 
 **Database schema (SQLite):**
 
@@ -94,15 +95,24 @@ Three genuine, non-obvious bugs surfaced during development. Each is stated here
 ### Running locally
 
 ```bash
-# Backend
+# Backend (Docker)
 cd backend
+cp .env.example .env     # optional: set BACKEND_GEMINI_KEY to enable the demo
 docker compose up --build
+
+# Backend (without Docker) + tests
+cd backend
+pip install -r requirements-dev.txt
+uvicorn main:app --reload
+pytest
 
 # Client
 cd client
 pip install -r requirements.txt
 python main.py
 ```
+
+Configuration is read from environment variables (or `backend/.env`) and validated at startup; see `backend/.env.example` for every setting and its default.
 
 ### Distribution
 
