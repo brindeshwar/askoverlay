@@ -8,15 +8,24 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
 
 import main
 from config import Settings, get_settings
+from database import connection
+from database.models import DailyUsage, Device
 from routes import chat as chat_module
 from services.gemini_service import GeminiError
 
 
 def make_settings(**overrides) -> Settings:
-    values = dict(backend_gemini_key="backend-key", demo_request_limit=3, database_url=os.environ["DATABASE_URL"])
+    values = dict(
+        backend_gemini_key="backend-key",
+        demo_request_limit=3,
+        demo_ip_daily_limit=1000,      # high by default so only the tests about these caps hit them
+        demo_global_daily_limit=1000,
+        database_url=os.environ["DATABASE_URL"],
+    )
     values.update(overrides)
     return Settings(_env_file=None, **values)
 
@@ -34,6 +43,11 @@ def settings_override():
 @pytest.fixture
 def client(settings_override):
     with TestClient(main.app) as c:  # entering the context runs the lifespan (creates tables)
+        # Daily counters are shared by every request in a day, so each test starts from zero.
+        with connection.SessionLocal() as db:
+            db.execute(delete(DailyUsage))
+            db.execute(delete(Device))
+            db.commit()
         yield c
 
 

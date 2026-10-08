@@ -1,6 +1,6 @@
 # backend/routes/chat
 import logging
-from fastapi import APIRouter, Header, HTTPException, Depends
+from fastapi import APIRouter, Header, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from config import Settings, get_settings
 from database.connection import get_db
 from services.gemini_service import GeminiError, start_stream
-from services.quota_service import consume_demo_request, get_demo_usage
+from services.quota_service import DemoDecision, DemoLimits, consume_demo_request, get_demo_usage, refund_demo_request
 
 log = logging.getLogger("askoverlay.chat")
 
@@ -28,6 +28,20 @@ class ChatRequest(BaseModel):
     interaction_id: str | None = Field(default=None, max_length=256)
 
 
+def client_ip(request: Request, settings: Settings) -> str:
+    """The caller's IP, used for the per-IP demo cap.
+
+    X-Forwarded-For is client-controlled unless a proxy we run appends to it, so it is
+    only believed when trust_forwarded_for is set - and then only its LAST entry, the
+    one our own proxy added.
+    """
+    if settings.trust_forwarded_for:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
 async def _stream(api_key: str, request: ChatRequest, settings: Settings) -> StreamingResponse:
     try:
         lines = await start_stream(
@@ -38,13 +52,14 @@ async def _stream(api_key: str, request: ChatRequest, settings: Settings) -> Str
             settings.gemini_timeout_seconds,
         )
     except GeminiError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from e
     return StreamingResponse(lines, media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
+    http_request: Request,
     x_gemini_key: str | None = Header(default=None),
     x_device_id: str | None = DeviceIdHeader,
     settings: Settings = Depends(get_settings),
@@ -57,16 +72,41 @@ async def chat(
         log.info("Routing: demo (device) path")
         if not settings.backend_gemini_key:
             log.error("Demo requested but BACKEND_GEMINI_KEY is not configured")
-            raise HTTPException(status_code=503, detail="The demo is not available right now. Add your own Gemini API key to use AskOverlay.")
+            raise HTTPException(
+                status_code=503,
+                detail="The demo is not available right now. Add your own Gemini API key to use AskOverlay.",
+            )
+
+        ip = client_ip(http_request, settings)
+        limits = DemoLimits(settings.demo_request_limit, settings.demo_ip_daily_limit, settings.demo_global_daily_limit)
 
         # Blocking DB work runs in the threadpool so it can't stall other users' streams.
-        allowed = await run_in_threadpool(consume_demo_request, x_device_id, settings.demo_request_limit)
-        if not allowed:
+        decision = await run_in_threadpool(consume_demo_request, x_device_id, ip, limits)
+        if decision is DemoDecision.DEVICE_LIMIT:
             raise HTTPException(
                 status_code=429,
-                detail=f"Demo limit reached ({settings.demo_request_limit} requests). Add your own Gemini API key to keep using AskOverlay.",
+                detail=(
+                    f"Demo limit reached ({settings.demo_request_limit} requests). "
+                    "Add your own Gemini API key to keep using AskOverlay."
+                ),
             )
-        return await _stream(settings.backend_gemini_key, request, settings)
+        if decision is DemoDecision.IP_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many demo requests from your network today. Try again tomorrow, or add your own Gemini API key.",
+            )
+        if decision is DemoDecision.GLOBAL_LIMIT:
+            raise HTTPException(
+                status_code=503,
+                detail="The demo has reached its daily capacity. Come back tomorrow, or add your own Gemini API key.",
+            )
+
+        try:
+            return await _stream(settings.backend_gemini_key, request, settings)
+        except HTTPException:
+            # Gemini failed before answering: that is our problem, not the user's, so don't charge them for it.
+            await run_in_threadpool(refund_demo_request, x_device_id, ip)
+            raise
 
     log.warning("Chat request with no valid auth header")
     raise HTTPException(status_code=400, detail="Missing X-Gemini-Key or X-Device-Id header.")

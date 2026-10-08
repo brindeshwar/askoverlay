@@ -7,7 +7,10 @@ from google.genai import types
 
 log = logging.getLogger("askoverlay.gemini")
 
-SYSTEM_INSTRUCTION = "You are a helpful assistant. Use markdown formatting naturally where it helps clarity (headers, bold, bullet points, code blocks)."
+SYSTEM_INSTRUCTION = (
+    "You are a helpful assistant. Use markdown formatting naturally where it helps clarity "
+    "(headers, bold, bullet points, code blocks)."
+)
 
 
 class GeminiError(Exception):

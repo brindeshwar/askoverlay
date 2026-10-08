@@ -17,7 +17,16 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.5-flash-lite"
     gemini_timeout_seconds: float = Field(default=60, gt=0)
 
-    demo_request_limit: int = Field(default=10, ge=1)
+    # Demo caps. The device cap is a fairness limit (device ids are client-generated and
+    # forgeable); the per-IP and global daily caps are what actually bound abuse and spend.
+    demo_request_limit: int = Field(default=10, ge=1)         # per device, for its lifetime
+    demo_ip_daily_limit: int = Field(default=30, ge=1)       # per client IP, per UTC day
+    demo_global_daily_limit: int = Field(default=300, ge=1)  # whole demo, per UTC day
+
+    # Only enable behind a reverse proxy you control that appends the real client IP to
+    # X-Forwarded-For (the last entry is trusted). Off by default: a directly exposed
+    # server must not believe a header the client can set.
+    trust_forwarded_for: bool = False
 
     database_url: str = "sqlite:///./askoverlay.db"
     log_level: str = "INFO"
