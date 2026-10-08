@@ -6,6 +6,17 @@ from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 log = logging.getLogger("askoverlay.client.worker")
 
+def _error_detail(response):
+    """The backend's human-readable message for a non-200 reply (FastAPI puts it under "detail")."""
+    try:
+        detail = response.json().get("detail")
+    except ValueError:
+        detail = None
+    if isinstance(detail, str):
+        return detail
+    return f"The server could not process the request (HTTP {response.status_code})."
+
+
 class WorkerSignals(QObject):
     chunk_received = Signal(str)
     finished = Signal()
@@ -45,6 +56,12 @@ class StreamWorker(QRunnable):
                     detail = response.json().get("detail", "Daily limit reached.")
                     log.info(f"Quota exceeded: {detail}")
                     self.signals.quota_exceeded.emit(detail)
+                    return
+
+                if response.status_code >= 400:
+                    detail = _error_detail(response)
+                    log.error(f"Backend error {response.status_code}: {detail}")
+                    self.signals.error.emit(detail)
                     return
 
                 for line in response.iter_lines():
