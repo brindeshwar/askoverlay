@@ -133,6 +133,13 @@ errors on tool calls did not reproduce here, but the area is fast-moving: pin ve
 products; if so, screenshots sent through the free demo key contradict "never stored". Check the current
 terms before making that claim, or send screenshots only on BYOK / a paid key.
 
+**Correction (same day, later).** A second, unrelated test (the pointing eval, 16 calls per model) showed the
+reverse ordering: `3.5-flash-lite` median 1.9 s, `3.1-flash-lite` median 13.4 s. Free-tier latency is
+dominated by API load and varies hour to hour, so the "3.1 is several times faster" finding above should be
+read as "latency on this key is unpredictable", not as a property of either model. This is the argument for
+the fallback arrangement, and against tuning the primary/fallback order on small samples. Re-measure on a
+paid key, with timing spread over several days, before drawing any conclusion about speed.
+
 **Decision (owner).** Primary `gemini-3.5-flash-lite`, fallback `gemini-3.1-flash-lite`, both configurable
 (`GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`). The benchmark above recommended the reverse order for speed;
 the owner kept 3.5 as primary, and the fallback also covers its slow tail only on failures (rate limit,
