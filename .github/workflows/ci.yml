@@ -20,8 +20,9 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install -r requirements-dev.txt
-      - run: ruff check .
+      - run: ruff check . ../evals --config ruff.toml
       - run: pytest -q
+      - run: pytest -q ../evals/pointing
 
   client:
     name: Client (syntax check + history tests)

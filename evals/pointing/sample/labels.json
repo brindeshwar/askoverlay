@@ -1,0 +1,81 @@
+{
+ "images": [
+  {
+   "file": "ui_real.png",
+   "targets": [
+    {
+     "question": "How do I save my changes?",
+     "box": [
+      1479,
+      830,
+      1588,
+      861
+     ]
+    },
+    {
+     "question": "How do I close this without keeping my changes?",
+     "box": [
+      1261,
+      830,
+      1361,
+      861
+     ]
+    },
+    {
+     "question": "How do I restore the factory settings?",
+     "box": [
+      1122,
+      830,
+      1252,
+      861
+     ]
+    },
+    {
+     "question": "How do I turn on notifications?",
+     "box": [
+      39,
+      258,
+      208,
+      286
+     ]
+    },
+    {
+     "question": "How do I switch to a dark theme?",
+     "box": [
+      39,
+      335,
+      182,
+      364
+     ]
+    },
+    {
+     "question": "How do I change the language?",
+     "box": [
+      114,
+      170,
+      1558,
+      201
+     ]
+    },
+    {
+     "question": "Where do I change my username?",
+     "box": [
+      114,
+      130,
+      1558,
+      161
+     ]
+    },
+    {
+     "question": "Where are the privacy settings?",
+     "box": [
+      92,
+      52,
+      169,
+      82
+     ]
+    }
+   ]
+  }
+ ]
+}

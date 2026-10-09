@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pointing eval labeler</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 0; background: #1b1c20; color: #e8e6e1; }
+  header { display: flex; gap: 12px; align-items: center; padding: 10px 14px; background: #25262b; flex-wrap: wrap; }
+  header label, header button { background: #34353c; color: inherit; border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  header input[type=file] { display: none; }
+  main { display: flex; gap: 14px; padding: 14px; align-items: flex-start; }
+  #stage { flex: 1; min-width: 0; overflow: auto; }
+  canvas { display: block; background: #000; cursor: crosshair; max-width: 100%; }
+  aside { width: 340px; flex-shrink: 0; }
+  input[type=text] { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #4a4b53; background: #17181b; color: inherit; }
+  button.primary { background: #d9a21b; color: #2b1f00; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; margin-top: 8px; }
+  ul { list-style: none; padding: 0; margin: 12px 0 0; }
+  li { background: #25262b; border-radius: 6px; padding: 8px; margin-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
+  li button { background: none; border: 0; color: #f09595; cursor: pointer; }
+  .muted { color: #8e8c86; font-size: 12px; }
+  #status { margin-left: auto; }
+</style>
+</head>
+<body>
+<header>
+  <label>1. Choose screenshots<input id="images" type="file" accept="image/*" multiple></label>
+  <label>Load labels.json (optional)<input id="loadLabels" type="file" accept=".json"></label>
+  <button id="prev">&larr; Prev</button>
+  <span id="position" class="muted"></span>
+  <button id="next">Next &rarr;</button>
+  <button id="export">2. Export labels.json</button>
+  <span id="status" class="muted"></span>
+</header>
+<main>
+  <div id="stage"><canvas id="canvas" width="800" height="450" aria-label="Screenshot: drag to draw a box around the control"></canvas></div>
+  <aside>
+    <p class="muted">Drag a box around the control that answers the question, tight around what you would click. Then type the question as a user would ask it, and press Enter.</p>
+    <input id="question" type="text" placeholder="How do I turn on dark mode?" autocomplete="off">
+    <button id="add" class="primary">Add target (Enter)</button>
+    <p id="error" class="muted" style="color:#f09595"></p>
+    <ul id="targets"></ul>
+  </aside>
+</main>
+<script>
+const STORE = 'askoverlay-pointing-labels-v1';
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const state = { files: [], index: 0, img: null, scale: 1, labels: {}, pending: null, drag: null };
+
+try { state.labels = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { state.labels = {}; }
+
+function save() {
+  try { localStorage.setItem(STORE, JSON.stringify(state.labels)); } catch (e) { /* storage unavailable: export still works */ }
+  document.getElementById('status').textContent = 'saved in this browser ' + new Date().toLocaleTimeString();
+}
+
+function currentName() { return state.files[state.index] ? state.files[state.index].name : null; }
+function targetsOf(name) { return (state.labels[name] = state.labels[name] || []); }
+
+function loadImage() {
+  const file = state.files[state.index];
+  state.pending = null;
+  if (!file) { state.img = null; render(); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { state.img = img; fit(); render(); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+function fit() {
+  const room = Math.max(400, document.getElementById('stage').clientWidth);
+  state.scale = Math.min(1, room / state.img.naturalWidth);
+  canvas.width = Math.round(state.img.naturalWidth * state.scale);
+  canvas.height = Math.round(state.img.naturalHeight * state.scale);
+}
+
+function box(b, color, width) {
+  ctx.strokeStyle = color; ctx.lineWidth = width;
+  ctx.strokeRect(b[0] * state.scale, b[1] * state.scale, (b[2] - b[0]) * state.scale, (b[3] - b[1]) * state.scale);
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (state.img) ctx.drawImage(state.img, 0, 0, canvas.width, canvas.height);
+  const name = currentName();
+  if (name) targetsOf(name).forEach(t => box(t.box, '#3fb950', 2));
+  if (state.pending) box(state.pending, '#d9a21b', 2);
+  document.getElementById('position').textContent = name ? `${state.index + 1} / ${state.files.length}  ${name}` : 'no screenshots loaded';
+  const list = document.getElementById('targets');
+  list.innerHTML = '';
+  (name ? targetsOf(name) : []).forEach((t, i) => {
+    const li = document.createElement('li');
+    const text = document.createElement('span'); text.textContent = t.question;
+    const del = document.createElement('button'); del.textContent = 'Delete'; del.setAttribute('aria-label', 'Delete target: ' + t.question);
+    del.onclick = () => { targetsOf(name).splice(i, 1); save(); render(); };
+    li.append(text, del); list.append(li);
+  });
+}
+
+function toImage(e) {
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return null;  // not laid out yet: ignore the event rather than produce NaN coordinates
+  const sx = canvas.width / r.width, sy = canvas.height / r.height;
+  return [(e.clientX - r.left) * sx / state.scale, (e.clientY - r.top) * sy / state.scale];
+}
+
+canvas.addEventListener('mousedown', e => { if (state.img) state.drag = toImage(e); });
+canvas.addEventListener('mousemove', e => {
+  if (!state.drag) return;
+  const point = toImage(e);
+  if (!point) return;
+  const [x, y] = point;
+  state.pending = [Math.min(state.drag[0], x), Math.min(state.drag[1], y), Math.max(state.drag[0], x), Math.max(state.drag[1], y)];
+  render();
+});
+window.addEventListener('mouseup', () => {
+  state.drag = null;
+  if (state.pending && (state.pending[2] - state.pending[0] < 3 || state.pending[3] - state.pending[1] < 3)) { state.pending = null; render(); }
+  if (state.pending) document.getElementById('question').focus();
+});
+
+function validBox(b) {
+  return Array.isArray(b) && b.length === 4 && b.every(Number.isFinite) && b[2] - b[0] >= 3 && b[3] - b[1] >= 3;
+}
+
+function addTarget() {
+  const err = document.getElementById('error');
+  const question = document.getElementById('question').value.trim();
+  const name = currentName();
+  if (!name) { err.textContent = 'Choose screenshots first.'; return; }
+  if (!validBox(state.pending)) { err.textContent = 'Drag a box around the control first.'; return; }
+  if (!question) { err.textContent = 'Type the question a user would ask.'; return; }
+  err.textContent = '';
+  const image = state.img;
+  const clamped = [state.pending[0], state.pending[1], state.pending[2], state.pending[3]]
+    .map((v, i) => Math.max(0, Math.min(i % 2 === 0 ? image.naturalWidth : image.naturalHeight, Math.round(v))));
+  targetsOf(name).push({ question, box: clamped });
+  state.pending = null;
+  document.getElementById('question').value = '';
+  save(); render();
+}
+
+function go(step) {
+  if (!state.files.length) return;
+  state.index = (state.index + step + state.files.length) % state.files.length;
+  loadImage();
+}
+
+document.getElementById('add').onclick = addTarget;
+document.getElementById('question').addEventListener('keydown', e => { if (e.key === 'Enter') addTarget(); });
+document.getElementById('prev').onclick = () => go(-1);
+document.getElementById('next').onclick = () => go(1);
+document.getElementById('images').onchange = e => {
+  state.files = Array.from(e.target.files).sort((a, b) => a.name.localeCompare(b.name));
+  state.index = 0; loadImage();
+};
+document.getElementById('loadLabels').onchange = async e => {
+  const data = JSON.parse(await e.target.files[0].text());
+  (data.images || []).forEach(im => { state.labels[im.file] = im.targets || []; });
+  save(); render();
+};
+window.addEventListener('resize', () => { if (state.img) { fit(); render(); } });
+
+function buildExport() {
+  const images = Object.keys(state.labels).sort().filter(n => state.labels[n].length).map(n => ({ file: n, targets: state.labels[n] }));
+  return { images };
+}
+document.getElementById('export').onclick = () => {
+  const blob = new Blob([JSON.stringify(buildExport(), null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'labels.json'; a.click();
+};
+render();
+</script>
+</body>
+</html>
