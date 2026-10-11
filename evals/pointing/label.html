@@ -11,8 +11,8 @@
   header input[type=file] { display: none; }
   main { display: flex; gap: 14px; padding: 14px; align-items: flex-start; }
   #stage { flex: 1; min-width: 0; overflow: auto; }
-  canvas { display: block; background: #000; cursor: crosshair; max-width: 100%; }
-  aside { width: 360px; flex-shrink: 0; }
+  canvas { display: block; background: #000; cursor: crosshair; max-width: 100%; user-select: none; -webkit-user-select: none; touch-action: none; }
+  aside { width: 360px; flex-shrink: 0; position: sticky; top: 14px; max-height: calc(100vh - 28px); overflow-y: auto; }
   h3 { font-size: 13px; margin: 14px 0 6px; color: #b9b7b0; font-weight: 500; }
   input[type=text] { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #4a4b53; background: #17181b; color: inherit; }
   button.primary { background: #d9a21b; color: #2b1f00; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; margin-top: 8px; }
@@ -57,7 +57,7 @@
   </aside>
 </main>
 <script>
-window.LABELER_VERSION = 2;
+window.LABELER_VERSION = 3;
 const GOAL = 60;
 const STORE = 'askoverlay-pointing-labels-v1';
 const STORE_SUG = 'askoverlay-pointing-suggestions-v2';
@@ -94,8 +94,10 @@ function loadImage() {
 }
 
 function fit() {
-  const room = Math.max(400, document.getElementById('stage').clientWidth);
-  state.scale = Math.min(1, room / state.img.naturalWidth);
+  // Fit the WHOLE screenshot in the window, both ways, so you never have to scroll while drawing a box.
+  const roomW = Math.max(300, document.getElementById('stage').clientWidth);
+  const roomH = Math.max(300, window.innerHeight - document.querySelector('header').getBoundingClientRect().height - 40);
+  state.scale = Math.min(1, roomW / state.img.naturalWidth, roomH / state.img.naturalHeight);
   canvas.width = Math.round(state.img.naturalWidth * state.scale);
   canvas.height = Math.round(state.img.naturalHeight * state.scale);
 }
@@ -170,7 +172,7 @@ function toImage(e) {
   return [(e.clientX - r.left) * sx / state.scale, (e.clientY - r.top) * sy / state.scale];
 }
 
-canvas.addEventListener('mousedown', e => { if (state.img) state.drag = toImage(e); });
+canvas.addEventListener('mousedown', e => { if (!state.img) return; e.preventDefault(); state.drag = toImage(e); });
 canvas.addEventListener('mousemove', e => {
   if (!state.drag) return;
   const point = toImage(e);

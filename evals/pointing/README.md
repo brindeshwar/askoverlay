@@ -59,6 +59,9 @@ Then open `label.html` in your browser (double-click it; nothing to install):
 Every label records where its wording came from (`suggested`, `edited` or `manual`), and the report shows the
 click-hit rate for each group, so we can see if AI-written questions are easier than yours.
 
+Make the browser window as big as you can (maximise it): the whole screenshot is always fitted into the window,
+so a bigger window means bigger screenshots and easier, more precise boxes.
+
 Tips: label what you would *click*, not the whole row or panel. A good question describes the goal the way a
 confused user would ("how do I make it stop sending me alerts?"), not the way the button is named.
 
