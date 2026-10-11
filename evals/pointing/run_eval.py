@@ -173,6 +173,10 @@ def report_text(records: list[dict], models: list[str]) -> str:
             lines.append(f"| {bucket} | {s['n']} | {pct(s['hit'])} | {pct(s['iou_ok'])} | {mean_iou} | {pct(s['parsed'])} |")
         lines.append("")
         lines.append(f"Verdict: **{scoring.verdict(summary)}**")
+        baseline = summary.get("random_click_baseline")
+        if baseline is not None:
+            lines.append("")
+            lines.append(f"For scale: a click at a random spot would land on the target {baseline * 100:.0f}% of the time.")
         by_source = scoring.source_breakdown(rows)
         if len(by_source) > 1 or "unknown" not in by_source:
             parts = [f"{name} {v['n']} ({pct(v['hit']).strip()} hit)" for name, v in by_source.items()]

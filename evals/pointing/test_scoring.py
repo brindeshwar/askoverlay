@@ -86,8 +86,8 @@ def test_size_buckets_by_fraction_of_screenshot_area():
 
 # --- aggregation and the decision rule -----------------------------------------------------------------
 
-def rec(hit, iou_value, bucket="medium", parsed=True):
-    return {"parsed": parsed, "hit": hit, "iou": iou_value, "iou_ok": iou_value >= 0.5, "bucket": bucket}
+def rec(hit, iou_value, bucket="medium", parsed=True, area_frac=0.01):
+    return {"parsed": parsed, "hit": hit, "iou": iou_value, "iou_ok": iou_value >= 0.5, "bucket": bucket, "area_frac": area_frac}
 
 
 def test_summarize_computes_rates_overall_and_per_bucket():
@@ -100,7 +100,7 @@ def test_summarize_computes_rates_overall_and_per_bucket():
 
 def test_verdict_thresholds_are_the_ones_written_in_the_readme():
     def verdict_of(records):
-        return scoring.verdict(scoring.summarize(records), min_targets=4)
+        return scoring.verdict(scoring.summarize(records), min_targets=4, min_small=0)
 
     good = [rec(True, 0.8, "small")] * 9 + [rec(False, 0.0, "small")]
     assert verdict_of([rec(True, 0.8)] * 20).startswith("GO")
@@ -111,9 +111,35 @@ def test_verdict_thresholds_are_the_ones_written_in_the_readme():
 
 
 def test_a_small_sample_can_never_produce_a_verdict():
-    perfect_but_tiny = scoring.summarize([rec(True, 0.9)] * 8)
+    perfect_but_tiny = scoring.summarize([rec(True, 0.9, "small")] * 8)
     assert scoring.verdict(perfect_but_tiny).startswith("INSUFFICIENT DATA")
-    assert scoring.verdict(scoring.summarize([rec(True, 0.9)] * scoring.MIN_TARGETS)).startswith("GO")
+    enough = scoring.summarize([rec(True, 0.9, "small")] * scoring.MIN_TARGETS)
+    assert scoring.verdict(enough).startswith("GO")
+
+
+def test_no_small_targets_means_no_verdict_instead_of_a_free_pass():
+    """Regression: a dataset with no small targets used to skip the small-target requirement and could say GO."""
+    only_big = scoring.summarize([rec(True, 0.9, "large")] * 40)
+    assert scoring.verdict(only_big).startswith("INCOMPLETE")
+    few_small = scoring.summarize([rec(True, 0.9, "small")] * 7 + [rec(True, 0.9, "large")] * 40)
+    assert scoring.verdict(few_small).startswith("INCOMPLETE")
+
+
+def test_labels_that_are_regions_not_controls_are_flagged_by_the_random_click_baseline():
+    coarse = scoring.summarize([rec(True, 0.9, "large", area_frac=0.35)] * 40)
+    assert coarse["random_click_baseline"] == pytest.approx(0.35)
+    assert scoring.verdict(coarse).startswith("LABELS TOO COARSE")
+
+
+def test_the_baseline_is_the_mean_share_of_the_screen_covered_by_the_boxes():
+    summary = scoring.summarize([rec(True, 0.9, area_frac=0.01), rec(True, 0.9, area_frac=0.03)])
+    assert summary["random_click_baseline"] == pytest.approx(0.02)
+    assert scoring.summarize([])["random_click_baseline"] is None
+
+
+def test_score_records_how_much_of_the_screen_the_target_covers():
+    result = scoring.score([0, 0, 10, 10], [0, 0, 50, 20], width=100, height=100)
+    assert result["area_frac"] == pytest.approx(0.10)
 
 
 def test_labels_keep_the_source_of_the_wording_and_default_to_unknown():

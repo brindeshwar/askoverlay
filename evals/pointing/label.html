@@ -49,7 +49,8 @@
     <p id="noSuggestions" class="muted"></p>
     <h3>Your question</h3>
     <input id="question" type="text" placeholder="Click a suggestion, or type your own" autocomplete="off">
-    <p class="muted" style="margin:6px 0 0">Then drag a tight box around the one control that answers it, and press Enter.</p>
+    <p class="muted" style="margin:6px 0 0">Then drag a tight box around the <b>one control</b> (the button, icon or field itself, not the panel around it) and press Enter.</p>
+    <p id="boxHint" class="muted" style="margin:4px 0 0"></p>
     <button id="add" class="primary">Add target (Enter)</button>
     <p id="error" class="muted" style="color:#f09595"></p>
     <h3>Targets on this screenshot</h3>
@@ -57,14 +58,15 @@
   </aside>
 </main>
 <script>
-window.LABELER_VERSION = 3;
+window.LABELER_VERSION = 4;
 const GOAL = 60;
+const BIG_BOX_SHARE = 0.10;  // a box covering more of the screenshot than this is probably a region, not one control
 const STORE = 'askoverlay-pointing-labels-v1';
 const STORE_SUG = 'askoverlay-pointing-suggestions-v2';
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 // suggestions: file -> [{text, status: 'new' | 'used' | 'dismissed'}]
-const state = { files: [], index: 0, img: null, scale: 1, labels: {}, suggestions: {}, pending: null, drag: null, active: null };
+const state = { files: [], index: 0, img: null, scale: 1, labels: {}, suggestions: {}, pending: null, drag: null, active: null, bigConfirmed: false };
 
 function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || 'null') || fallback; } catch (e) { return fallback; } }
 state.labels = load(STORE, {});
@@ -143,6 +145,10 @@ function render() {
   document.getElementById('position').textContent = name ? `${state.index + 1} / ${state.files.length}  ${name}` : 'no screenshots loaded';
   const total = totalTargets();
   document.getElementById('goal').textContent = `Targets: ${total} / ${GOAL}` + (total >= GOAL ? '  done!' : '');
+  const share = state.pending && state.img ? boxShare(state.pending) : 0;
+  const hint = document.getElementById('boxHint');
+  hint.textContent = state.pending ? `Box covers ${Math.round(share * 100)}% of the screenshot` + (share > BIG_BOX_SHARE ? ' - that is big. Is it tight around ONE control?' : '') : '';
+  hint.style.color = share > BIG_BOX_SHARE ? '#f0b95f' : '#8e8c86';
   renderSuggestions(name);
   const list = document.getElementById('targets');
   list.innerHTML = '';
@@ -172,7 +178,7 @@ function toImage(e) {
   return [(e.clientX - r.left) * sx / state.scale, (e.clientY - r.top) * sy / state.scale];
 }
 
-canvas.addEventListener('mousedown', e => { if (!state.img) return; e.preventDefault(); state.drag = toImage(e); });
+canvas.addEventListener('mousedown', e => { if (!state.img) return; e.preventDefault(); state.bigConfirmed = false; document.getElementById('error').textContent = ''; state.drag = toImage(e); });
 canvas.addEventListener('mousemove', e => {
   if (!state.drag) return;
   const point = toImage(e);
@@ -187,6 +193,10 @@ window.addEventListener('mouseup', () => {
   if (state.pending) document.getElementById('question').focus();
 });
 
+function boxShare(b) {
+  return ((b[2] - b[0]) * (b[3] - b[1])) / (state.img.naturalWidth * state.img.naturalHeight);
+}
+
 function validBox(b) {
   return Array.isArray(b) && b.length === 4 && b.every(Number.isFinite) && b[2] - b[0] >= 3 && b[3] - b[1] >= 3;
 }
@@ -198,6 +208,12 @@ function addTarget() {
   if (!name) { err.textContent = 'Choose screenshots first.'; return; }
   if (!validBox(state.pending)) { err.textContent = 'Drag a box around the control first.'; return; }
   if (!question) { err.textContent = 'Click a suggestion or type the question a user would ask.'; return; }
+  // A big box is probably a whole panel. Ask once, so a deliberate big box is still possible.
+  if (boxShare(state.pending) > BIG_BOX_SHARE && !state.bigConfirmed) {
+    state.bigConfirmed = true;
+    err.textContent = `This box covers ${Math.round(boxShare(state.pending) * 100)}% of the screenshot. Redraw it tight around the one control, or press Add again to keep it.`;
+    return;
+  }
   err.textContent = '';
   const image = state.img;
   const clamped = state.pending.map((v, i) => Math.max(0, Math.min(i % 2 === 0 ? image.naturalWidth : image.naturalHeight, Math.round(v))));
@@ -208,7 +224,7 @@ function addTarget() {
     state.suggestions[name][state.active.index].status = 'used';
   }
   targetsOf(name).push({ question, box: clamped, source });
-  state.pending = null; state.active = null;
+  state.pending = null; state.active = null; state.bigConfirmed = false;
   document.getElementById('question').value = '';
   save(); render();
 }
