@@ -84,6 +84,14 @@ def summarize(records: list[dict]) -> dict:
 MIN_TARGETS = 30  # below this a percentage is an anecdote, not evidence
 
 
+def source_breakdown(records: list[dict]) -> dict:
+    """Click-hit rate by where the question wording came from, to show whether AI-written questions are easier."""
+    groups: dict[str, list[dict]] = {}
+    for r in records:
+        groups.setdefault(r.get("source", "unknown"), []).append(r)
+    return {name: {"n": len(rows), "hit": sum(r["hit"] for r in rows) / len(rows)} for name, rows in sorted(groups.items())}
+
+
 def verdict(summary: dict, min_targets: int = MIN_TARGETS) -> str:
     """The decision rule, written down BEFORE seeing real results (see README): go / mitigate / rethink."""
     overall = summary["overall"]
@@ -111,5 +119,10 @@ def labels_from_json(text: str) -> list[dict]:
                 raise ValueError(f"bad box for {image.get('file')}: {box!r}")
             if not str(target.get("question", "")).strip():
                 raise ValueError(f"empty question for {image.get('file')}")
-            flat.append({"file": image["file"], "question": target["question"].strip(), "box": [float(v) for v in box]})
+            flat.append({
+                "file": image["file"],
+                "question": target["question"].strip(),
+                "box": [float(v) for v in box],
+                "source": target.get("source", "unknown"),  # suggested / edited / manual, from the labeler
+            })
     return flat

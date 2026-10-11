@@ -35,19 +35,32 @@ Windows UI Automation tree, which has exact rectangles.
 - **Privacy:** screenshots may contain personal information. Crop or avoid anything sensitive. They are
   sent to Google's API when you run the eval. Put them in `evals/pointing/data/`, which is git-ignored.
 
-## 2. Label them (about 30-40 minutes)
+## 2. Label them (about 15-20 minutes with suggestions)
 
-Open `label.html` in your browser (double-click it; nothing to install).
+First let the model write candidate questions for each screenshot (you still draw every box):
 
-1. Choose all the screenshots.
-2. For each one, drag a tight box around a control, type the question a user would ask ("How do I turn on
-   dark mode?"), press Enter. Aim for 3-4 targets per screenshot, at least 60 in total, including some
-   small ones.
-3. Progress is saved in the browser as you go. Click **Export labels.json** when done and save it next to the
-   screenshots, as `data/labels.json`.
+```bash
+cd evals/pointing
+python suggest.py --dataset data      # writes data/suggestions.json (6 questions per screenshot)
+```
 
-Tips: label what you would *click*, not the whole row or panel. Ask the way a confused user would, not the way
-the button is named ("how do I make it stop sending me alerts?" rather than "Notifications toggle").
+Then open `label.html` in your browser (double-click it; nothing to install):
+
+1. **Choose screenshots**: select all the images in `data/`.
+2. **Load suggestions.json** from the same folder.
+3. For each screenshot, **click a suggested question**, then **drag a tight box** around the one control that
+   answers it, and press Enter.
+   - Don't like the wording? Edit the text before adding it, or type your own question instead.
+   - Control not on screen, or the question is unclear? Press the cross to dismiss it.
+4. Aim for **60 targets** in total (the counter at the top shows progress), including some small controls
+   and a few questions you write yourself. Progress is saved in the browser as you go.
+5. Click **Export labels.json** and save it into `data/`.
+
+Every label records where its wording came from (`suggested`, `edited` or `manual`), and the report shows the
+click-hit rate for each group, so we can see if AI-written questions are easier than yours.
+
+Tips: label what you would *click*, not the whole row or panel. A good question describes the goal the way a
+confused user would ("how do I make it stop sending me alerts?"), not the way the button is named.
 
 ## 3. Run
 

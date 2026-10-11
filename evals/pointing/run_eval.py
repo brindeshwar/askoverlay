@@ -135,7 +135,7 @@ async def run(args) -> int:
                 error = re.sub(re.escape(key), "***", f"{type(exc).__name__}: {str(exc)[:120]}")
             result = scoring.score(pred_px, label["box"], width, height)
             record = {"model": model, "file": label["file"], "question": label["question"], "truth": label["box"],
-                      "pred": pred_px, "seconds": seconds, "error": error, **result}
+                      "source": label.get("source", "unknown"), "pred": pred_px, "seconds": seconds, "error": error, **result}
             records.append(record)
             if args.overlays != "none" and (args.overlays == "all" or not result["hit"]):
                 draw_overlay(path, label["box"], pred_px, os.path.join(out_dir, "overlays", f"{model}_{index:03d}.png"))
@@ -173,6 +173,11 @@ def report_text(records: list[dict], models: list[str]) -> str:
             lines.append(f"| {bucket} | {s['n']} | {pct(s['hit'])} | {pct(s['iou_ok'])} | {mean_iou} | {pct(s['parsed'])} |")
         lines.append("")
         lines.append(f"Verdict: **{scoring.verdict(summary)}**")
+        by_source = scoring.source_breakdown(rows)
+        if len(by_source) > 1 or "unknown" not in by_source:
+            parts = [f"{name} {v['n']} ({pct(v['hit']).strip()} hit)" for name, v in by_source.items()]
+            lines.append("")
+            lines.append("Question wording: " + ", ".join(parts))
         misses = [r for r in rows if not r["hit"]]
         if misses:
             lines.append("")

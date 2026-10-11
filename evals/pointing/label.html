@@ -6,61 +6,86 @@
 <title>Pointing eval labeler</title>
 <style>
   body { font: 14px system-ui, sans-serif; margin: 0; background: #1b1c20; color: #e8e6e1; }
-  header { display: flex; gap: 12px; align-items: center; padding: 10px 14px; background: #25262b; flex-wrap: wrap; }
+  header { display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: #25262b; flex-wrap: wrap; }
   header label, header button { background: #34353c; color: inherit; border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; }
   header input[type=file] { display: none; }
   main { display: flex; gap: 14px; padding: 14px; align-items: flex-start; }
   #stage { flex: 1; min-width: 0; overflow: auto; }
   canvas { display: block; background: #000; cursor: crosshair; max-width: 100%; }
-  aside { width: 340px; flex-shrink: 0; }
+  aside { width: 360px; flex-shrink: 0; }
+  h3 { font-size: 13px; margin: 14px 0 6px; color: #b9b7b0; font-weight: 500; }
   input[type=text] { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #4a4b53; background: #17181b; color: inherit; }
   button.primary { background: #d9a21b; color: #2b1f00; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; margin-top: 8px; }
-  ul { list-style: none; padding: 0; margin: 12px 0 0; }
-  li { background: #25262b; border-radius: 6px; padding: 8px; margin-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
-  li button { background: none; border: 0; color: #f09595; cursor: pointer; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { background: #25262b; border-radius: 6px; padding: 7px 8px; margin-bottom: 5px; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  li .q { flex: 1; cursor: pointer; }
+  li.used .q { color: #6f6d68; text-decoration: line-through; cursor: default; }
+  li.active { outline: 1px solid #d9a21b; }
+  li button { background: none; border: 0; color: #8e8c86; cursor: pointer; font-size: 14px; }
+  li button.del { color: #f09595; }
   .muted { color: #8e8c86; font-size: 12px; }
   #status { margin-left: auto; }
+  #goal { font-weight: 500; }
 </style>
 </head>
 <body>
 <header>
   <label>1. Choose screenshots<input id="images" type="file" accept="image/*" multiple></label>
+  <label>2. Load suggestions.json<input id="loadSuggestions" type="file" accept=".json"></label>
   <label>Load labels.json (optional)<input id="loadLabels" type="file" accept=".json"></label>
   <button id="prev">&larr; Prev</button>
   <span id="position" class="muted"></span>
   <button id="next">Next &rarr;</button>
-  <button id="export">2. Export labels.json</button>
+  <span id="goal"></span>
+  <button id="export">3. Export labels.json</button>
   <span id="status" class="muted"></span>
 </header>
 <main>
   <div id="stage"><canvas id="canvas" width="800" height="450" aria-label="Screenshot: drag to draw a box around the control"></canvas></div>
   <aside>
-    <p class="muted">Drag a box around the control that answers the question, tight around what you would click. Then type the question as a user would ask it, and press Enter.</p>
-    <input id="question" type="text" placeholder="How do I turn on dark mode?" autocomplete="off">
+    <h3>Suggested questions for this screenshot</h3>
+    <p class="muted" style="margin:0 0 6px">Click one to use it. Edit the wording if you like. Press &#10005; to dismiss one that does not fit (control not visible, unclear, or you dislike it).</p>
+    <ul id="suggestions"></ul>
+    <p id="noSuggestions" class="muted"></p>
+    <h3>Your question</h3>
+    <input id="question" type="text" placeholder="Click a suggestion, or type your own" autocomplete="off">
+    <p class="muted" style="margin:6px 0 0">Then drag a tight box around the one control that answers it, and press Enter.</p>
     <button id="add" class="primary">Add target (Enter)</button>
     <p id="error" class="muted" style="color:#f09595"></p>
+    <h3>Targets on this screenshot</h3>
     <ul id="targets"></ul>
   </aside>
 </main>
 <script>
+window.LABELER_VERSION = 2;
+const GOAL = 60;
 const STORE = 'askoverlay-pointing-labels-v1';
+const STORE_SUG = 'askoverlay-pointing-suggestions-v2';
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-const state = { files: [], index: 0, img: null, scale: 1, labels: {}, pending: null, drag: null };
+// suggestions: file -> [{text, status: 'new' | 'used' | 'dismissed'}]
+const state = { files: [], index: 0, img: null, scale: 1, labels: {}, suggestions: {}, pending: null, drag: null, active: null };
 
-try { state.labels = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { state.labels = {}; }
+function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || 'null') || fallback; } catch (e) { return fallback; } }
+state.labels = load(STORE, {});
+state.suggestions = load(STORE_SUG, {});
 
 function save() {
-  try { localStorage.setItem(STORE, JSON.stringify(state.labels)); } catch (e) { /* storage unavailable: export still works */ }
+  try {
+    localStorage.setItem(STORE, JSON.stringify(state.labels));
+    localStorage.setItem(STORE_SUG, JSON.stringify(state.suggestions));
+  } catch (e) { /* storage unavailable: export still works */ }
   document.getElementById('status').textContent = 'saved in this browser ' + new Date().toLocaleTimeString();
 }
 
 function currentName() { return state.files[state.index] ? state.files[state.index].name : null; }
 function targetsOf(name) { return (state.labels[name] = state.labels[name] || []); }
+function totalTargets() { return Object.values(state.labels).reduce((n, t) => n + t.length, 0); }
 
 function loadImage() {
   const file = state.files[state.index];
-  state.pending = null;
+  state.pending = null; state.active = null;
+  document.getElementById('question').value = '';
   if (!file) { state.img = null; render(); return; }
   const url = URL.createObjectURL(file);
   const img = new Image();
@@ -80,6 +105,33 @@ function box(b, color, width) {
   ctx.strokeRect(b[0] * state.scale, b[1] * state.scale, (b[2] - b[0]) * state.scale, (b[3] - b[1]) * state.scale);
 }
 
+function renderSuggestions(name) {
+  const list = document.getElementById('suggestions');
+  list.innerHTML = '';
+  const items = name ? (state.suggestions[name] || []) : [];
+  const visible = items.map((s, i) => ({ s, i })).filter(x => x.s.status !== 'dismissed');
+  const dismissed = items.length - visible.length;
+  visible.forEach(({ s, i }) => {
+    const li = document.createElement('li');
+    if (s.status === 'used') li.className = 'used';
+    if (state.active && state.active.file === name && state.active.index === i) li.classList.add('active');
+    const q = document.createElement('span'); q.className = 'q'; q.textContent = s.text;
+    if (s.status !== 'used') q.onclick = () => useSuggestion(name, i);
+    li.append(q);
+    if (s.status !== 'used') {
+      const x = document.createElement('button'); x.className = 'del'; x.textContent = '✕';
+      x.setAttribute('aria-label', 'Dismiss suggestion: ' + s.text);
+      x.onclick = () => { s.status = 'dismissed'; if (state.active && state.active.index === i) state.active = null; save(); render(); };
+      li.append(x);
+    }
+    list.append(li);
+  });
+  const note = document.getElementById('noSuggestions');
+  if (!name) note.textContent = '';
+  else if (!items.length) note.textContent = 'No suggestions loaded for this screenshot: type your own question.';
+  else note.textContent = dismissed ? `${dismissed} dismissed.` : '';
+}
+
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (state.img) ctx.drawImage(state.img, 0, 0, canvas.width, canvas.height);
@@ -87,15 +139,28 @@ function render() {
   if (name) targetsOf(name).forEach(t => box(t.box, '#3fb950', 2));
   if (state.pending) box(state.pending, '#d9a21b', 2);
   document.getElementById('position').textContent = name ? `${state.index + 1} / ${state.files.length}  ${name}` : 'no screenshots loaded';
+  const total = totalTargets();
+  document.getElementById('goal').textContent = `Targets: ${total} / ${GOAL}` + (total >= GOAL ? '  done!' : '');
+  renderSuggestions(name);
   const list = document.getElementById('targets');
   list.innerHTML = '';
   (name ? targetsOf(name) : []).forEach((t, i) => {
     const li = document.createElement('li');
-    const text = document.createElement('span'); text.textContent = t.question;
-    const del = document.createElement('button'); del.textContent = 'Delete'; del.setAttribute('aria-label', 'Delete target: ' + t.question);
+    const text = document.createElement('span'); text.className = 'q'; text.textContent = t.question;
+    const del = document.createElement('button'); del.className = 'del'; del.textContent = 'Delete'; del.setAttribute('aria-label', 'Delete target: ' + t.question);
     del.onclick = () => { targetsOf(name).splice(i, 1); save(); render(); };
     li.append(text, del); list.append(li);
   });
+}
+
+function useSuggestion(name, i) {
+  const s = state.suggestions[name][i];
+  state.active = { file: name, index: i, text: s.text };
+  const input = document.getElementById('question');
+  input.value = s.text;
+  document.getElementById('error').textContent = '';
+  render();
+  input.focus();
 }
 
 function toImage(e) {
@@ -130,13 +195,18 @@ function addTarget() {
   const name = currentName();
   if (!name) { err.textContent = 'Choose screenshots first.'; return; }
   if (!validBox(state.pending)) { err.textContent = 'Drag a box around the control first.'; return; }
-  if (!question) { err.textContent = 'Type the question a user would ask.'; return; }
+  if (!question) { err.textContent = 'Click a suggestion or type the question a user would ask.'; return; }
   err.textContent = '';
   const image = state.img;
-  const clamped = [state.pending[0], state.pending[1], state.pending[2], state.pending[3]]
-    .map((v, i) => Math.max(0, Math.min(i % 2 === 0 ? image.naturalWidth : image.naturalHeight, Math.round(v))));
-  targetsOf(name).push({ question, box: clamped });
-  state.pending = null;
+  const clamped = state.pending.map((v, i) => Math.max(0, Math.min(i % 2 === 0 ? image.naturalWidth : image.naturalHeight, Math.round(v))));
+  // Where did the wording come from? Recorded so results can say how much of the test set was AI-worded.
+  let source = 'manual';
+  if (state.active && state.active.file === name) {
+    source = question === state.active.text ? 'suggested' : 'edited';
+    state.suggestions[name][state.active.index].status = 'used';
+  }
+  targetsOf(name).push({ question, box: clamped, source });
+  state.pending = null; state.active = null;
   document.getElementById('question').value = '';
   save(); render();
 }
@@ -154,6 +224,14 @@ document.getElementById('next').onclick = () => go(1);
 document.getElementById('images').onchange = e => {
   state.files = Array.from(e.target.files).sort((a, b) => a.name.localeCompare(b.name));
   state.index = 0; loadImage();
+};
+document.getElementById('loadSuggestions').onchange = async e => {
+  const data = JSON.parse(await e.target.files[0].text());
+  Object.keys(data).forEach(file => {
+    const known = new Map((state.suggestions[file] || []).map(s => [s.text, s.status]));
+    state.suggestions[file] = (data[file] || []).map(text => ({ text, status: known.get(text) || 'new' }));
+  });
+  save(); render();
 };
 document.getElementById('loadLabels').onchange = async e => {
   const data = JSON.parse(await e.target.files[0].text());

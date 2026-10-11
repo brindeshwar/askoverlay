@@ -116,6 +116,24 @@ def test_a_small_sample_can_never_produce_a_verdict():
     assert scoring.verdict(scoring.summarize([rec(True, 0.9)] * scoring.MIN_TARGETS)).startswith("GO")
 
 
+def test_labels_keep_the_source_of_the_wording_and_default_to_unknown():
+    text = json.dumps({"images": [{"file": "a.png", "targets": [
+        {"question": "q1", "box": [1, 2, 30, 40], "source": "edited"},
+        {"question": "q2", "box": [5, 5, 9, 9]}]}]})
+    assert [t["source"] for t in scoring.labels_from_json(text)] == ["edited", "unknown"]
+
+
+def test_source_breakdown_shows_whether_suggested_questions_are_easier():
+    records = (
+        [dict(rec(True, 0.9), source="suggested")] * 3
+        + [dict(rec(False, 0.0), source="manual")] * 2
+        + [dict(rec(True, 0.9), source="manual")]
+    )
+    breakdown = scoring.source_breakdown(records)
+    assert breakdown["suggested"] == {"n": 3, "hit": 1.0}
+    assert breakdown["manual"]["n"] == 3 and abs(breakdown["manual"]["hit"] - 1 / 3) < 1e-9
+
+
 def test_a_strong_overall_score_cannot_hide_failure_on_small_targets():
     records = [rec(True, 0.9, "large")] * 18 + [rec(False, 0.0, "small")] * 2 + [rec(True, 0.9, "small")] * 0
     summary = scoring.summarize(records)
