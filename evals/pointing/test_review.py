@@ -97,3 +97,39 @@ def test_the_report_never_prints_questions_or_file_names(run_dir):
     json.dump({"judgments": {}}, open(os.path.join(review_dir, "judgments.json"), "w", encoding="utf-8"))
     text = review_report.report(run_dir)
     assert "How do I save" not in text and IMAGE not in text
+
+
+# --- the self-contained page --------------------------------------------------------------------------------
+
+def test_standalone_page_embeds_every_image_and_needs_no_folder(run_dir):
+    import base64
+    import io
+    import re
+
+    from PIL import Image
+
+    review_dir = review.build(run_dir, SAMPLE, seed=1)
+    page = open(os.path.join(review_dir, "standalone.html"), encoding="utf-8").read()
+    assert 'img/i0' not in page                                  # no reference to the img folder at all
+    uris = re.findall(r"data:image/jpeg;base64,([A-Za-z0-9+/=]+)", page)
+    assert len(uris) == 6                                        # 3 shown items x (screenshot + zoom)
+    for payload in uris:                                         # and each one is a real, decodable JPEG
+        with Image.open(io.BytesIO(base64.b64decode(payload))) as image:
+            assert image.format == "JPEG" and image.width > 10
+
+
+def test_standalone_page_is_just_as_blind_and_script_safe(run_dir):
+    page = open(os.path.join(review.build(run_dir, SAMPLE, seed=1), "standalone.html"), encoding="utf-8").read()
+    assert "model-alpha" not in page and "model-beta" not in page and "gemini" not in page.lower()
+    assert page.count("</script>") == 1
+
+
+def test_both_pages_list_the_same_items_in_the_same_order(run_dir):
+    review_dir = review.build(run_dir, SAMPLE, seed=1)
+
+    def ids(name):
+        page = open(os.path.join(review_dir, name), encoding="utf-8").read()
+        import re
+        return re.findall(r'"id": "(i\d+)"', page)
+
+    assert ids("index.html") == ids("standalone.html") != []

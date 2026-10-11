@@ -31,6 +31,10 @@
   <button id="export">Export judgments.json</button>
   <span id="status" class="muted" style="margin-left:auto"></span>
 </header>
+<div id="imgError" style="display:none; background:#3a2a12; color:#f0c987; padding:10px 14px">
+  The screenshots did not load. This happens when the page is opened somewhere that cannot read the <code>img</code> folder next to it
+  (for example a preview pane). Open <b>standalone.html</b> in the same folder instead: it has the images built in.
+</div>
 <div id="done"><b>All done.</b> Click <i>Export judgments.json</i>, and save it next to this page (inside the <code>review</code> folder).</div>
 <main>
   <div id="stage"><img id="shot" alt="Screenshot with the model's answer drawn as a red box"></div>
@@ -48,7 +52,7 @@
   </aside>
 </main>
 <script>
-window.REVIEW_VERSION = 3;
+window.REVIEW_VERSION = 4;
 const ITEMS = /*DATA*/[];
 const STORE = 'askoverlay-review-' + (ITEMS.length ? ITEMS[0].run : 'none');
 let judgments = {};
@@ -57,8 +61,16 @@ let index = Math.max(0, ITEMS.findIndex(it => !(it.id in judgments)));
 if (index < 0) index = 0;
 
 function persist() {
-  try { localStorage.setItem(STORE, JSON.stringify(judgments)); } catch (e) { /* export still works */ }
-  document.getElementById('status').textContent = 'saved in this browser ' + new Date().toLocaleTimeString();
+  const status = document.getElementById('status');
+  try {
+    localStorage.setItem(STORE, JSON.stringify(judgments));
+    status.textContent = 'saved in this browser ' + new Date().toLocaleTimeString();
+    status.style.color = '';
+  } catch (e) {
+    // Some views (previews, private windows) block storage. Say so, instead of claiming a save that did not happen.
+    status.textContent = 'NOT saved automatically in this view: click Export before closing';
+    status.style.color = '#f0b95f';
+  }
 }
 function answered() { return Object.keys(judgments).length; }
 
@@ -83,6 +95,10 @@ function judge(value) {
   render();
 }
 
+for (const id of ['shot', 'crop']) {
+  document.getElementById(id).addEventListener('error', () => { document.getElementById('imgError').style.display = 'block'; });
+  document.getElementById(id).addEventListener('load', () => { document.getElementById('imgError').style.display = 'none'; });
+}
 document.querySelectorAll('.choices button').forEach(b => b.onclick = () => judge(Number(b.dataset.j)));
 document.getElementById('skip').onclick = () => judge('skip');
 document.getElementById('back').onclick = () => { index = Math.max(0, index - 1); render(); };

@@ -3,14 +3,17 @@
     python review.py                 # latest run in results/
     python review.py --run results/20261012-023128
 
-Writes <run>/review/index.html. Open it in a browser, press 1 / 2 / 3 for each item, export judgments.json into the
-review folder, then run:  python review_report.py
+Writes <run>/review/standalone.html (images built in; works anywhere, including preview panes) and index.html (the
+same page, smaller, loading images from the img/ folder next to it). Open one in a browser, press 1 / 2 / 3 for each
+item, export judgments.json into the review folder, then run:  python review_report.py
 
 Which model produced each box is hidden (it lives in review/key.json, which the page never loads) and the order is
 shuffled, so a judge cannot favour a model. Everything stays local: results/ is git-ignored.
 """
 import argparse
+import base64
 import glob
+import io
 import json
 import os
 import random
@@ -59,6 +62,24 @@ def make_crop(source: Image.Image, box) -> Image.Image:
     return crop.resize((max(1, round(crop.width * scale)), max(1, round(crop.height * scale))), Image.LANCZOS)
 
 
+def data_uri(path: str, max_edge: int, quality: int) -> str:
+    """A JPEG file as a data: URI, re-encoded smaller so the self-contained page stays a reasonable size."""
+    with Image.open(path) as image:
+        image = image.convert("RGB")
+        if max(image.size) > max_edge:
+            scale = max_edge / max(image.size)
+            image = image.resize((round(image.width * scale), round(image.height * scale)), Image.LANCZOS)
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=quality)
+    return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def write_page(template: str, items: list[dict], path: str) -> None:
+    data = json.dumps(items).replace("</", "<\\/")     # keep a question containing "</script>" from breaking the page
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(template.replace("/*DATA*/[]", data))
+
+
 def build(run_dir: str, dataset: str, seed: int) -> str:
     with open(os.path.join(run_dir, "results.json"), encoding="utf-8") as f:
         records = json.load(f)
@@ -86,10 +107,15 @@ def build(run_dir: str, dataset: str, seed: int) -> str:
 
     with open(os.path.join(HERE, "review_template.html"), encoding="utf-8") as f:
         template = f.read()
-    data = json.dumps(items).replace("</", "<\\/")     # keep a question containing "</script>" from breaking the page
-    html = template.replace("/*DATA*/[]", data)
-    with open(os.path.join(review_dir, "index.html"), "w", encoding="utf-8") as f:
-        f.write(html)
+    write_page(template, items, os.path.join(review_dir, "index.html"))
+    # The same page with the images built in. It needs no folder next to it, so it also works in a preview pane and
+    # when moved; index.html (smaller, loads images from img/) is for a normal browser.
+    embedded = [
+        dict(it, shot=data_uri(os.path.join(review_dir, it["shot"]), 1280, 78),
+             crop=data_uri(os.path.join(review_dir, it["crop"]), 520, 80))
+        for it in items
+    ]
+    write_page(template, embedded, os.path.join(review_dir, "standalone.html"))
     with open(os.path.join(review_dir, "key.json"), "w", encoding="utf-8") as f:   # never loaded by the page
         json.dump(key, f, indent=1)
     return review_dir
@@ -103,7 +129,8 @@ def main() -> int:
     args = parser.parse_args()
     run_dir = os.path.abspath(args.run) if args.run else latest_run()
     review_dir = build(run_dir, os.path.abspath(args.dataset), args.seed)
-    print(f"Review page ready: {os.path.join(review_dir, 'index.html')}")
+    size_mb = os.path.getsize(os.path.join(review_dir, "standalone.html")) / 1e6
+    print(f"Review page ready: {os.path.join(review_dir, 'standalone.html')}  ({size_mb:.1f} MB, images built in)")
     return 0
 
 

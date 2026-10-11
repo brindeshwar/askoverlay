@@ -58,7 +58,7 @@
   </aside>
 </main>
 <script>
-window.LABELER_VERSION = 6;
+window.LABELER_VERSION = 7;
 const GOAL = 60;
 const BIG_BOX_SHARE = 0.10;  // a box covering more of the screenshot than this is probably a region, not one control
 const STORE = 'askoverlay-pointing-labels-v1';
@@ -73,11 +73,17 @@ state.labels = load(STORE, {});
 state.suggestions = load(STORE_SUG, {});
 
 function save() {
+  const status = document.getElementById('status');
   try {
     localStorage.setItem(STORE, JSON.stringify(state.labels));
     localStorage.setItem(STORE_SUG, JSON.stringify(state.suggestions));
-  } catch (e) { /* storage unavailable: export still works */ }
-  document.getElementById('status').textContent = 'saved in this browser ' + new Date().toLocaleTimeString();
+    status.textContent = 'saved in this browser ' + new Date().toLocaleTimeString();
+    status.style.color = '';
+  } catch (e) {
+    // Storage can be blocked (previews, private windows). Say so rather than claim a save that did not happen.
+    status.textContent = 'NOT saved automatically in this view: click Export before closing';
+    status.style.color = '#f0b95f';
+  }
 }
 
 function currentName() { return state.files[state.index] ? state.files[state.index].name : null; }

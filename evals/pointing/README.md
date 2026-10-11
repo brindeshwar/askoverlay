@@ -96,7 +96,9 @@ model drew:
 python review.py                # builds results/<run>/review/index.html (latest run)
 ```
 
-Open that page in a browser. For each item you see the screenshot with the model's box in red, a zoomed view of
+Open `review/standalone.html` in a regular browser (Chrome or Edge: double-click it, or right-click, Open with). It has the
+images built in, so it works wherever you open it; `index.html` is the same page but loads the images from the
+`img` folder next to it, which fails in preview panes that do not give a page access to its folder. For each item you see the screenshot with the model's box in red, a zoomed view of
 what is inside the box, and the question. Press **1** (right control, tight box), **2** (right control, but the box
 is too big or loose), **3** (wrong control), **S** if you cannot tell, **B** to go back. The page is blind (it never
 says which model drew the box) and shuffled, so you cannot favour either model. Click **Export judgments.json** and
