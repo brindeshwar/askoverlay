@@ -190,3 +190,55 @@ def test_labels_are_flattened_and_validated():
 def test_bad_labels_fail_loudly(target):
     with pytest.raises(ValueError):
         scoring.labels_from_json(json.dumps({"images": [{"file": "a.png", "targets": [target]}]}))
+
+
+# --- human-judged evaluation --------------------------------------------------------------------------------
+
+def judged(model, judgments, button_sized=True):
+    return [{"model": model, "judgment": j, "button_sized": button_sized} for j in judgments]
+
+
+def test_wilson_interval_is_wide_for_small_samples_and_narrow_for_large_ones():
+    low30, high30 = scoring.wilson_interval(26, 30)
+    low300, high300 = scoring.wilson_interval(260, 300)
+    assert (high30 - low30) > (high300 - low300) * 2.5
+    assert low30 < 26 / 30 < high30
+    assert scoring.wilson_interval(0, 0) is None
+    assert scoring.wilson_interval(10, 10)[1] == pytest.approx(1.0)
+
+
+def test_judged_summary_counts_failures_as_wrong_and_excludes_skips():
+    items = judged("m", [1, 1, 2, 3, "fail", "skip", None])
+    s = scoring.judged_summary(items)["m"]
+    assert (s["total"], s["skipped"], s["failures"]) == (5, 2, 1)
+    assert s["right"] == pytest.approx(3 / 5)   # 1, 1, 2 are right; 3 and fail are wrong
+    assert s["tight"] == pytest.approx(2 / 5)
+
+
+def test_judged_summary_keeps_models_separate():
+    s = scoring.judged_summary(judged("a", [1] * 10) + judged("b", [3] * 10))
+    assert s["a"]["right"] == 1.0 and s["b"]["right"] == 0.0
+
+
+def test_judged_verdict_follows_the_rule_written_in_advance():
+    def verdict(judgments, button_sized=True):
+        return scoring.judged_verdict(scoring.judged_summary(judged("m", judgments, button_sized))["m"])
+
+    assert verdict([1] * 30).startswith("GO")
+    assert verdict([1] * 18 + [2] * 9 + [3] * 3).startswith("GO")        # 90% right, 60% tight
+    assert verdict([1] * 12 + [2] * 15 + [3] * 3).startswith("MITIGATE")  # 90% right but only 40% tight
+    assert verdict([1] * 22 + [3] * 8).startswith("MITIGATE")             # 73% right
+    assert verdict([1] * 15 + [3] * 15).startswith("RETHINK")             # 50% right
+    assert verdict([1] * 29).startswith("INSUFFICIENT DATA")
+    assert scoring.judged_verdict({"total": 0}) == "no judgments yet"
+
+
+def test_judged_verdict_needs_button_sized_boxes_not_just_big_regions():
+    assert scoring.judged_verdict(scoring.judged_summary(judged("m", [1] * 40, button_sized=False))["m"]).startswith("INCOMPLETE")
+
+
+def test_failures_drag_the_verdict_down_instead_of_being_ignored():
+    # 24 right answers, 6 failures: 80% right, not 100%
+    s = scoring.judged_summary(judged("m", [1] * 24 + ["fail"] * 6))["m"]
+    assert s["right"] == pytest.approx(0.8)
+    assert scoring.judged_verdict(s).startswith("MITIGATE")

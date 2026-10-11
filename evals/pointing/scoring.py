@@ -5,6 +5,7 @@ format, [ymin, xmin, ymax, xmax] normalised to 0-1000, which is independent of i
 screenshot before sending it does not change how predictions map back to the original.
 """
 import json
+import math
 import re
 
 _FOUR_NUMBERS = re.compile(r"\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]")
@@ -142,3 +143,62 @@ def labels_from_json(text: str) -> list[dict]:
                 "source": target.get("source", "unknown"),  # suggested / edited / manual, from the labeler
             })
     return flat
+
+
+# --- human-judged evaluation ------------------------------------------------------------------------------
+# When the labelled boxes are too coarse to score against, a person looks at each model box and says whether it
+# is on the right control. The pass bar below was fixed BEFORE any judgments were made.
+
+JUDGED_MIN = 30          # judged answers per model before a verdict is allowed
+JUDGED_MIN_BUTTON = 8    # of which at least this many must be button-sized boxes (< 0.25% of the screen)
+BUTTON_SIZED = 0.0025
+GO_RIGHT, GO_TIGHT, MITIGATE_RIGHT = 0.85, 0.60, 0.70
+
+
+def wilson_interval(successes: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
+    """95% confidence interval for a rate: how far the true value could plausibly be from what we measured."""
+    if n == 0:
+        return None
+    p = successes / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return max(0.0, centre - half), min(1.0, centre + half)
+
+
+def judged_summary(items: list[dict]) -> dict:
+    """items: {model, judgment, button_sized}. judgment is 1 (right control, tight), 2 (right control, box too
+    loose), 3 (wrong control), "fail" (the model gave no usable answer; counts as wrong) or None/"skip" (excluded)."""
+    summary: dict = {}
+    for model in sorted({i["model"] for i in items}):
+        rows = [i for i in items if i["model"] == model]
+        counted = [r for r in rows if r["judgment"] in (1, 2, 3, "fail")]
+        right = sum(1 for r in counted if r["judgment"] in (1, 2))
+        tight = sum(1 for r in counted if r["judgment"] == 1)
+        summary[model] = {
+            "total": len(counted),
+            "skipped": len(rows) - len(counted),
+            "failures": sum(1 for r in counted if r["judgment"] == "fail"),
+            "right": right / len(counted) if counted else None,
+            "right_ci": wilson_interval(right, len(counted)),
+            "tight": tight / len(counted) if counted else None,
+            "tight_ci": wilson_interval(tight, len(counted)),
+            "button_sized": sum(1 for r in counted if r["button_sized"] and r["judgment"] in (1, 2, 3)),
+        }
+    return summary
+
+
+def judged_verdict(model_summary: dict, min_judged: int = JUDGED_MIN, min_button: int = JUDGED_MIN_BUTTON) -> str:
+    n = model_summary["total"]
+    if n == 0:
+        return "no judgments yet"
+    if n < min_judged:
+        return f"INSUFFICIENT DATA: {n} judged answers, need at least {min_judged}"
+    if model_summary["button_sized"] < min_button:
+        return (f"INCOMPLETE: only {model_summary['button_sized']} button-sized boxes were judged, "
+                f"need at least {min_button}")
+    if model_summary["right"] >= GO_RIGHT and model_summary["tight"] >= GO_TIGHT:
+        return "GO: the model points at the right control, and tightly enough to highlight it"
+    if model_summary["right"] >= MITIGATE_RIGHT:
+        return "MITIGATE: usually right, but add a refinement step (see README) before relying on it"
+    return "RETHINK: vision alone is not reliable enough for pointing"

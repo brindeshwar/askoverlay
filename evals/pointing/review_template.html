@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pointing eval review</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 0; background: #1b1c20; color: #e8e6e1; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  header { display: flex; gap: 12px; align-items: center; padding: 10px 14px; background: #25262b; flex-wrap: wrap; }
+  header button { background: #34353c; color: inherit; border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  main { flex: 1; min-height: 0; display: flex; gap: 14px; padding: 14px; align-items: stretch; }
+  #stage { flex: 1; min-width: 0; min-height: 0; overflow: auto; display: flex; align-items: flex-start; }
+  #shot { display: block; background: #000; max-width: 100%; max-height: 100%; }
+  aside { width: 380px; flex-shrink: 0; overflow-y: auto; }
+  #question { font-size: 17px; line-height: 1.4; margin: 0 0 10px; }
+  #crop { display: block; max-width: 100%; border: 1px solid #4a4b53; border-radius: 6px; background: #000; }
+  .muted { color: #8e8c86; font-size: 12px; }
+  .choices { display: grid; gap: 8px; margin: 12px 0; }
+  .choices button { text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid #4a4b53; background: #25262b; color: inherit; cursor: pointer; font-size: 14px; }
+  .choices button b { display: inline-block; width: 22px; color: #d9a21b; }
+  .choices button.chosen { outline: 2px solid #d9a21b; }
+  .small button { background: #34353c; color: inherit; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; margin-right: 6px; }
+  #done { display: none; background: #25262b; border-radius: 8px; padding: 10px 14px; margin: 10px 14px 0; }
+</style>
+</head>
+<body>
+<header>
+  <strong id="progress"></strong>
+  <button id="back">&larr; Back (B)</button>
+  <button id="skip">Skip: cannot tell (S)</button>
+  <button id="export">Export judgments.json</button>
+  <span id="status" class="muted" style="margin-left:auto"></span>
+</header>
+<div id="done"><b>All done.</b> Click <i>Export judgments.json</i>, and save it next to this page (inside the <code>review</code> folder).</div>
+<main>
+  <div id="stage"><img id="shot" alt="Screenshot with the model's answer drawn as a red box"></div>
+  <aside>
+    <p class="muted" style="margin:0 0 4px">The question the user asked:</p>
+    <p id="question"></p>
+    <p class="muted" style="margin:0 0 4px">Zoom on the red box:</p>
+    <img id="crop" alt="Zoomed view of the area inside the red box">
+    <div class="choices">
+      <button data-j="1"><b>1</b> Right control, red box is tight around it</button>
+      <button data-j="2"><b>2</b> Right control, but the box is too big or loose</button>
+      <button data-j="3"><b>3</b> Wrong control</button>
+    </div>
+    <p class="muted">Judge only whether the RED BOX is on the control that answers the question. Keys: 1, 2, 3, S to skip, B to go back.</p>
+  </aside>
+</main>
+<script>
+window.REVIEW_VERSION = 3;
+const ITEMS = /*DATA*/[];
+const STORE = 'askoverlay-review-' + (ITEMS.length ? ITEMS[0].run : 'none');
+let judgments = {};
+try { judgments = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { judgments = {}; }
+let index = Math.max(0, ITEMS.findIndex(it => !(it.id in judgments)));
+if (index < 0) index = 0;
+
+function persist() {
+  try { localStorage.setItem(STORE, JSON.stringify(judgments)); } catch (e) { /* export still works */ }
+  document.getElementById('status').textContent = 'saved in this browser ' + new Date().toLocaleTimeString();
+}
+function answered() { return Object.keys(judgments).length; }
+
+function render() {
+  const done = answered() >= ITEMS.length;
+  document.getElementById('done').style.display = done ? 'block' : 'none';
+  if (!ITEMS.length) { document.getElementById('progress').textContent = 'No items'; return; }
+  index = Math.min(index, ITEMS.length - 1);
+  const it = ITEMS[index];
+  document.getElementById('progress').textContent = `${answered()} judged of ${ITEMS.length}   (viewing ${index + 1})`;
+  document.getElementById('shot').src = it.shot;
+  document.getElementById('crop').src = it.crop;
+  document.getElementById('question').textContent = it.question;
+  document.querySelectorAll('.choices button').forEach(b => b.classList.toggle('chosen', String(judgments[it.id]) === b.dataset.j));
+}
+
+function judge(value) {
+  if (!ITEMS.length) return;
+  judgments[ITEMS[index].id] = value;
+  persist();
+  if (index < ITEMS.length - 1) index += 1;
+  render();
+}
+
+document.querySelectorAll('.choices button').forEach(b => b.onclick = () => judge(Number(b.dataset.j)));
+document.getElementById('skip').onclick = () => judge('skip');
+document.getElementById('back').onclick = () => { index = Math.max(0, index - 1); render(); };
+window.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === '1' || e.key === '2' || e.key === '3') judge(Number(e.key));
+  else if (e.key === 's' || e.key === 'S') judge('skip');
+  else if (e.key === 'b' || e.key === 'B' || e.key === 'ArrowLeft') { index = Math.max(0, index - 1); render(); }
+});
+document.getElementById('export').onclick = () => {
+  const blob = new Blob([JSON.stringify({ judgments }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'judgments.json'; a.click();
+};
+render();
+</script>
+</body>
+</html>

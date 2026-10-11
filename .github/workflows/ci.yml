@@ -22,6 +22,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check . ../evals --config ruff.toml
       - run: pytest -q
+      - run: pip install pillow==12.3.0   # the review-page tests build real images
       - run: pytest -q ../evals/pointing
 
   client:

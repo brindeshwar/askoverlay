@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pointing eval labeler</title>
 <style>
-  body { font: 14px system-ui, sans-serif; margin: 0; background: #1b1c20; color: #e8e6e1; }
+  body { font: 14px system-ui, sans-serif; margin: 0; background: #1b1c20; color: #e8e6e1; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
   header { display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: #25262b; flex-wrap: wrap; }
   header label, header button { background: #34353c; color: inherit; border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; }
   header input[type=file] { display: none; }
-  main { display: flex; gap: 14px; padding: 14px; align-items: flex-start; }
+  main { flex: 1; min-height: 0; display: flex; gap: 14px; padding: 14px; align-items: stretch; }
   #stage { flex: 1; min-width: 0; overflow: auto; }
   canvas { display: block; background: #000; cursor: crosshair; max-width: 100%; user-select: none; -webkit-user-select: none; touch-action: none; }
-  aside { width: 360px; flex-shrink: 0; position: sticky; top: 14px; max-height: calc(100vh - 28px); overflow-y: auto; }
+  aside { width: 360px; flex-shrink: 0; overflow-y: auto; }
   h3 { font-size: 13px; margin: 14px 0 6px; color: #b9b7b0; font-weight: 500; }
   input[type=text] { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #4a4b53; background: #17181b; color: inherit; }
   button.primary { background: #d9a21b; color: #2b1f00; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; margin-top: 8px; }
@@ -43,22 +43,22 @@
 <main>
   <div id="stage"><canvas id="canvas" width="800" height="450" aria-label="Screenshot: drag to draw a box around the control"></canvas></div>
   <aside>
-    <h3>Suggested questions for this screenshot</h3>
-    <p class="muted" style="margin:0 0 6px">Click one to use it. Edit the wording if you like. Press &#10005; to dismiss one that does not fit (control not visible, unclear, or you dislike it).</p>
-    <ul id="suggestions"></ul>
-    <p id="noSuggestions" class="muted"></p>
     <h3>Your question</h3>
     <input id="question" type="text" placeholder="Click a suggestion, or type your own" autocomplete="off">
     <p class="muted" style="margin:6px 0 0">Then drag a tight box around the <b>one control</b> (the button, icon or field itself, not the panel around it) and press Enter.</p>
     <p id="boxHint" class="muted" style="margin:4px 0 0"></p>
     <button id="add" class="primary">Add target (Enter)</button>
     <p id="error" class="muted" style="color:#f09595"></p>
+    <h3>Suggested questions for this screenshot</h3>
+    <p class="muted" style="margin:0 0 6px">Click one to use it. Edit the wording if you like. Press &#10005; to dismiss one that does not fit (control not visible, unclear, or you dislike it).</p>
+    <ul id="suggestions"></ul>
+    <p id="noSuggestions" class="muted"></p>
     <h3>Targets on this screenshot</h3>
     <ul id="targets"></ul>
   </aside>
 </main>
 <script>
-window.LABELER_VERSION = 4;
+window.LABELER_VERSION = 6;
 const GOAL = 60;
 const BIG_BOX_SHARE = 0.10;  // a box covering more of the screenshot than this is probably a region, not one control
 const STORE = 'askoverlay-pointing-labels-v1';
