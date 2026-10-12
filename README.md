@@ -2,6 +2,13 @@
 
 [![CI](https://github.com/brindeshwar/askoverlay/actions/workflows/ci.yml/badge.svg)](https://github.com/brindeshwar/askoverlay/actions/workflows/ci.yml)
 
+> **Project status: direction under review (2026-10-12).** The next product is an **AI test agent** that runs plain-English
+> tests in a background browser and returns evidence-backed verdicts, usable standalone or supervised by a coding agent
+> over MCP. The plan is in [`docs/`](docs/00-START-HERE.md) (start with [the review brief](docs/REVIEW-BRIEF.md)); current
+> state is in [`docs/status/STATUS.md`](docs/status/STATUS.md). AI agents working on this repository must follow
+> [`AGENTS.md`](AGENTS.md). **The rest of this README describes the earlier overlay product**, which is still in this
+> repository and still works, until the decision in [ADR-0009](docs/decisions/0009-pivot-to-an-ai-test-agent.md) is made.
+
 A Windows always-on-top desktop AI assistant. Click a small draggable icon, ask a question about anything you're looking at, get a streamed, formatted answer — no window switching required.
 
 Built as a portfolio project demonstrating full-stack AI application development: a PySide6 desktop client, a Dockerized FastAPI backend, and a live cloud deployment — with production-style concerns (secret handling, usage quotas, session memory) implemented deliberately, not assumed away.
@@ -74,7 +81,7 @@ devices(device_id PK, request_count)
 
 **SQLite, not MongoDB or Redis.** The data is small, fixed-shape, and single-instance — one row per device. MongoDB's flexible-schema strength isn't needed; Redis was not needed at this scale. SQLite needs zero extra infrastructure and fits comfortably on a free-tier VM.
 
-**One model pair for every path.** BYOK and demo traffic use the same primary (`gemini-3.5-flash-lite`) and fallback (`gemini-3.1-flash-lite`), both configurable. A live benchmark (see `docs/ADR.md`) showed `3.1-flash-lite` is several times faster to first token than `3.5-flash-lite` with equal accuracy on reading screenshots; the fallback therefore also improves latency when the primary is slow or rate-limited.
+**One model pair for every path.** BYOK and demo traffic use the same primary (`gemini-3.5-flash-lite`) and fallback (`gemini-3.1-flash-lite`), both configurable. A live benchmark (see ADR-0007 in `docs/decisions/`) showed `3.1-flash-lite` is several times faster to first token than `3.5-flash-lite` with equal accuracy on reading screenshots; the fallback therefore also improves latency when the primary is slow or rate-limited.
 
 **LangGraph, with the conversation held by the client.** The graph is deliberately small (`primary → fallback`), and failures are classified with LangChain's provider-neutral exception types rather than SDK internals. There is no checkpointer: each request carries the turns so far, so the server stores no conversations (a privacy and operations win), and a stale conversation id can no longer break a chat. The client trims history to the server's limits (40 turns, 60,000 characters). The honest trade-off: with one model call per request the framework's benefit is modest today; it earns more once a second tool (screen reading) joins the graph. Models are built per request inside the graph's closures, never passed through graph config, because config can end up in tracing metadata and the models hold the caller's API key.
 
