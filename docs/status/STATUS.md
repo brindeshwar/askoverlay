@@ -67,6 +67,8 @@ legacy overlay code, the owner's weekly time budget, and which LLM provider(s) t
   (login was removed); revoke it in the Google Cloud console.
 - The deployed VM still holds old PayPal and Google variables in its `.env`, and serves over plain HTTP.
 - `backend/Dockerfile` and `backend/.dockerignore` have uncommitted, unbuilt edits (healthcheck, ignore rules).
+- There is no `.gitattributes`, so git warns about line endings on every commit (the index holds LF, Windows checks out CRLF).
+  Add one (`* text=auto eol=lf` plus explicit binary patterns) in a small, separate change.
 - Whether prompts sent through a **free-tier** Gemini key may be used by Google to improve its products is unverified;
   this matters before claiming that screenshots are never stored.
 - GitHub Actions has not run yet; the first push may reveal Linux-only failures or GitHub-specific rejections.
