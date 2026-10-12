@@ -1,11 +1,13 @@
+.venv/
 .venv-backend/
 __pycache__/
 *.pyc
+.pytest_cache/
 .env
 *.db
 *.log
-test.json
-test2.json
-callback_test.json
+tests/
+pytest.ini
+requirements-dev.txt
 .git
 .gitignore
