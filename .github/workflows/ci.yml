@@ -5,10 +5,18 @@ on:
     branches: [main, v1.1]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   backend:
     name: Backend (lint + tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -20,7 +28,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install -r requirements-dev.txt
-      - run: ruff check . ../evals --config ruff.toml
+      - run: ruff check . ../evals ../tools --config ruff.toml
       - run: pytest -q
       - run: pip install pillow==12.3.0   # the review-page tests build real images
       - run: pytest -q ../evals/pointing
@@ -28,6 +36,7 @@ jobs:
   client:
     name: Client (syntax check + history tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,3 +46,18 @@ jobs:
       - run: python -m compileall -q client
       - run: pip install pytest==9.1.1
       - run: pytest -q client/tests
+
+  # One stable required check. Branch protection requires only this (and "docs"), so jobs can be added, renamed or
+  # skipped by path filters without leaving a required check that never reports. See docs/06-process/ci-cd.md.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [backend, client]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail if any required job failed or was cancelled
+        run: |
+          echo "backend: ${{ needs.backend.result }}"
+          echo "client:  ${{ needs.client.result }}"
+          test "${{ needs.backend.result }}" = "success" && test "${{ needs.client.result }}" = "success"

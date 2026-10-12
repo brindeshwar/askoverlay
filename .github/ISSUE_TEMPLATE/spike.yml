@@ -1,0 +1,31 @@
+name: Spike (time-boxed question)
+description: Find something out; do not build it
+labels: ["type:spike"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: One question a written answer can settle.
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Time box
+      description: A number of hours. Stop when it is spent and write down what you know.
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision this feeds
+      description: Which ADR or requirement changes depending on the answer?
+  - type: textarea
+    id: success
+    attributes:
+      label: What a good answer looks like
+      description: If this is a measurement, link or write the pre-registration (pass bar) BEFORE running anything.
+  - type: markdown
+    attributes:
+      value: Spikes end with a written answer in this issue. Spike code is not merged unless it is rewritten and reviewed.

@@ -1,0 +1,27 @@
+name: Decision needed
+description: Something must be decided and recorded as an ADR
+labels: ["type:decision"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What forces the decision, and what evidence exists?
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: At least two, including the simplest one. Pros and cons for each.
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: Who decides, and by when
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: The outcome is written as an ADR from docs/templates/adr-template.md and added to docs/decisions/README.md.

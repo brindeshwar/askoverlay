@@ -1,0 +1,11 @@
+# Code owners are asked to review changes to the paths they own (see docs/06-process/engineering-handbook.md section 4).
+# Security-sensitive and process paths are listed explicitly so they are never merged without the owner's attention.
+
+*                         @brindeshwar
+
+/.github/                 @brindeshwar
+/AGENTS.md                @brindeshwar
+/docs/decisions/          @brindeshwar
+/docs/04-architecture/security-threat-model.md  @brindeshwar
+/src/testagent/safety/    @brindeshwar
+/src/testagent/interfaces/  @brindeshwar

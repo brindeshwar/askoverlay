@@ -1,0 +1,24 @@
+name: Release checklist
+description: Cut a release (one issue per release)
+labels: ["type:chore"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: checkboxes
+    id: gate
+    attributes:
+      label: Release gate (docs/03-features-and-roadmap.md and the engineering handbook section 8)
+      options:
+        - label: Exit-gate evidence attached or linked (evaluation results file for this commit)
+        - label: CI green on the release commit
+        - label: Security checklist done (docs/04-architecture/security-threat-model.md section 6)
+        - label: Canary suite green; dependency audit and secret scan clean
+        - label: Cold-start drill passed and logged in docs/status/drills.md
+        - label: STATUS.md, roadmap and CHANGELOG.md updated
+        - label: Tag pushed; artifacts built by CI from the tag (not from a laptop)
+        - label: Release notes published; retrospective written

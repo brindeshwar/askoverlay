@@ -1,0 +1,38 @@
+name: Feature or story
+description: A user-facing capability or a piece of planned work
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: As a (persona), I want (capability), so that (outcome).
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable statements. Name the requirement ids this satisfies (for example FR-21, NFR-02).
+      placeholder: "- [ ] ... (FR-21)"
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: Release
+      description: Which release does this belong to (R1 to R6)? See docs/03-features-and-roadmap.md.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Design notes, risks, dependencies
+      description: Link the design documents or ADRs. If a decision is needed first, open a decision issue.
+  - type: checkboxes
+    id: ready
+    attributes:
+      label: Definition of Ready
+      options:
+        - label: Small enough for about two days of work (otherwise split it)
+        - label: Any needed decision is made or has its own issue
