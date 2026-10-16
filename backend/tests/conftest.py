@@ -62,8 +62,10 @@ def fake_gemini(monkeypatch):
     fake = Fake()
     fake.calls = []
 
-    async def fake_start_chat_stream(api_key, history, message, settings):
-        fake.calls.append(dict(api_key=api_key, history=history, message=message, model=settings.gemini_model))
+    async def fake_start_chat_stream(api_key, history, message, settings, screenshot=None):
+        fake.calls.append(
+            dict(api_key=api_key, history=history, message=message, model=settings.gemini_model, screenshot=screenshot)
+        )
         if fake.error:
             raise fake.error
 

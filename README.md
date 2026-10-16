@@ -11,6 +11,7 @@ Built as a portfolio project demonstrating full-stack AI application development
 - **Two access modes through one endpoint:**
   - **BYOK** — paste your own Gemini API key, unlimited use, zero cost or liability to the developer
   - **Demo mode** — 10 free requests per device in total (not per day), no signup required
+- **Look at my screen** (off by default): turn it on and each question is sent with a screenshot of your screen, so the model can answer about what you see. The chat window is left out of the capture, the image is downsized, used for that one message only, and never stored or logged. It uses a vision model directly, not OCR (see ADR-0003 and ADR-0010). Images cost more tokens, so they use the shared demo budget faster.
 - Real-time streaming responses (SSE) with live markdown rendering (headers, bold, lists)
 - Multi-turn memory held by the client: the server is stateless and never stores a conversation
 - Frameless, draggable, always-on-top overlay window with a persistent tray-managed lifecycle (no taskbar presence)

@@ -3,16 +3,17 @@ import os
 import ctypes
 import logging
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import QSettings, QThreadPool
 from auth import (
     determine_auth_mode,
     get_or_create_device_id,
     get_or_prompt_api_key,
 )
 from ui import build_window, build_icon, build_tray_icon, WINDOW_SIZE, ICON_SIZE
-from dialogs import show_first_run_dialog, show_quota_dialog
+from dialogs import show_first_run_dialog, show_quota_dialog, show_screen_notice
 from worker import StreamWorker, QuotaCheckWorker
 from history import trim_history, remember_exchange
+from screen import capture_screen_b64
 
 if sys.platform == "win32":
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("askoverlay.client.v1")
@@ -52,7 +53,25 @@ if auth_mode is None:
     else:
         sys.exit(0)
 
-window, add_user_message, add_assistant_message, add_system_message, input_field, send_button, usage_label, minimize_button = build_window(ICON_PATH)
+(
+    window, add_user_message, add_assistant_message, add_system_message,
+    input_field, send_button, usage_label, minimize_button, screen_checkbox,
+) = build_window(ICON_PATH)
+
+# "Look at my screen" is off by default and remembered between runs. The one-time privacy notice is shown on first use.
+preferences = QSettings("AskOverlay", "AskOverlay")
+screen_checkbox.setChecked(preferences.value("look_at_screen", False, type=bool))
+
+def on_screen_toggled(checked):
+    if checked and not preferences.value("screen_notice_ack", False, type=bool):
+        if not show_screen_notice():
+            screen_checkbox.setChecked(False)
+            return
+        preferences.setValue("screen_notice_ack", True)
+    preferences.setValue("look_at_screen", checked)
+    log.info(f"Look at my screen: {'on' if checked else 'off'}")
+
+screen_checkbox.toggled.connect(on_screen_toggled)
 
 def show_chat_window():
     icon_pos = icon_widget.pos()
@@ -100,7 +119,13 @@ def on_send():
         return
 
     log.info(f"Sending message: {user_message[:50]}")
+    screenshot_b64 = None
+    if screen_checkbox.isChecked():
+        screenshot_b64 = capture_screen_b64(window)
+        log.info(f"Screenshot attached: {'yes' if screenshot_b64 else 'no (capture failed)'}")
     add_user_message(user_message)
+    if screen_checkbox.isChecked() and screenshot_b64 is None:
+        add_system_message("I couldn't capture your screen, so I'm answering without it.")
     input_field.clear()
     send_button.setEnabled(False)
 
@@ -108,7 +133,7 @@ def on_send():
     pending_user_message = user_message
     stream_failed = False
 
-    worker = StreamWorker(user_message, trim_history(conversation), auth_mode, credential)
+    worker = StreamWorker(user_message, trim_history(conversation), auth_mode, credential, screenshot_b64)
     _track(worker)
     worker.signals.quota_exceeded.connect(on_quota_exceeded)
     worker.signals.chunk_received.connect(append_chunk)

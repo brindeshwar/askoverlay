@@ -2,6 +2,7 @@ import json
 import logging
 import requests
 from auth import BACKEND_URL
+from screen import chat_payload
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 log = logging.getLogger("askoverlay.client.worker")
@@ -24,10 +25,11 @@ class WorkerSignals(QObject):
     quota_exceeded = Signal(str)
 
 class StreamWorker(QRunnable):
-    def __init__(self, message, history, auth_mode, credential):
+    def __init__(self, message, history, auth_mode, credential, screenshot_b64=None):
         super().__init__()
         self.setAutoDelete(False)
         self.message = message
+        self.screenshot_b64 = screenshot_b64  # for this message only; never logged
         self.auth_mode = auth_mode
         self.credential = credential
         self.history = history
@@ -44,7 +46,7 @@ class StreamWorker(QRunnable):
         try:
             with requests.post(
                 f"{BACKEND_URL}/chat",
-                json={"message": self.message, "history": self.history},
+                json=chat_payload(self.message, self.history, self.screenshot_b64),
                 headers=headers,
                 stream=True,
                 timeout=(10, None)

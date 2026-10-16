@@ -14,6 +14,7 @@ class ScriptedChat(BaseChatModel):
     model: str = "fake"
     script: list[Any] = []
     calls: int = 0
+    seen: list[Any] = []  # the messages each call received
     closed: bool = False
 
     @property
@@ -26,6 +27,7 @@ class ScriptedChat(BaseChatModel):
 
     async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
         self.calls += 1
+        self.seen.append(list(messages))
         for item in self.script:
             if isinstance(item, BaseException):
                 raise item

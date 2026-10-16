@@ -2,7 +2,7 @@ from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor, QPen, QBrus
 from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QSystemTrayIcon, QMenu, QLabel, QFrame, QScrollArea
+    QSystemTrayIcon, QMenu, QLabel, QFrame, QScrollArea, QCheckBox
 )
 
 ICON_SIZE = QSize(64, 64)
@@ -168,6 +168,10 @@ def build_window(icon_path):
     input_layout.addWidget(input_field)
     input_layout.addWidget(send_button)
 
+    screen_checkbox = QCheckBox("Look at my screen")
+    screen_checkbox.setToolTip("When on, a screenshot of your screen is sent with each question, so I can see what you see.")
+    screen_checkbox.setStyleSheet("QCheckBox { color: gray; font-size: 11px; }")
+
     def mousePressEvent(event):
         if event.button() == Qt.LeftButton:
             window._drag_pos = event.globalPosition().toPoint() - window.pos()
@@ -184,6 +188,7 @@ def build_window(icon_path):
     layout.addLayout(top_bar)
     layout.addWidget(usage_label)
     layout.addWidget(scroll_area)
+    layout.addWidget(screen_checkbox)
     layout.addLayout(input_layout)
     window.setLayout(layout)
 
@@ -191,7 +196,7 @@ def build_window(icon_path):
 
     return (
         window, add_user_message, add_assistant_message, add_system_message,
-        input_field, send_button, usage_label, minimize_button
+        input_field, send_button, usage_label, minimize_button, screen_checkbox
     )
 
 

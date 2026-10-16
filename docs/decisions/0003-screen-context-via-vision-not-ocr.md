@@ -3,6 +3,8 @@
 - Status: Accepted
 - Date: 2026-10-09
 - Status detail: Accepted - open question resolved
+- Related: Decision 2 ("Middle" capture strategy, the `read_screen` tool) was superseded on 2026-10-16 by
+  [ADR-0010](0010-attach-the-screenshot-directly.md). Decision 1 (vision, not OCR) and the privacy rule stay in force.
 
 - Vision, not OCR: UI screenshots (small antialiased fonts, text in controls, layout that carries
   meaning) defeat traditional OCR, and the task is screen understanding, not transcription.

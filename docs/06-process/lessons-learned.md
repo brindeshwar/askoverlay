@@ -54,6 +54,8 @@ rule**. Dates are when it was found.
 | L-24 | A workflow file was rejected by the YAML parser | A step name contained `: ` (colon and space), read as a nested mapping | Validate every YAML file with a parser before committing; quote any scalar that contains a colon |
 | L-25 | A docs checker passed on its first run | A checker that has never failed proves nothing | Write negative tests for every rule, and break a **copy of the real repository** to see each rule fire |
 | L-26 | The same shell-escaping mistake as L-01 was made again while writing the checker: word-boundary escapes became invisible control characters and a test file was split across real newlines | A known rule was not applied under time pressure; the damage was invisible until a linter ran | Rules need teeth: write any file containing regexes or backslashes with the editor tools **and** scan it for control characters afterwards (`ord(c) < 32` other than newline and tab) |
+| L-27 | A test suite crashed at teardown with "environment variable is longer than 32767 characters" | pytest puts the test id in an environment variable, and a parametrized case whose value was a 2 MB string became part of its id | Give parametrized cases with large values explicit short `ids=` |
+| L-28 | Backslash escapes (`\n`, `\\x89`) written through a Python script inside a shell heredoc broke a source file twice more (a string split across real lines; a doubled backslash) | L-01 and L-26 again: the shell and tool layers touch backslashes, and doubling them by hand is as wrong as not | **Any text containing a backslash goes in with the editor tools (Write or Edit), never a heredoc.** Compile or run the file right after writing it |
 
 ## How to add a lesson
 

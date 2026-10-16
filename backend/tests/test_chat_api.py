@@ -1,9 +1,11 @@
+import base64
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from fastapi.testclient import TestClient
 
 import main
 from agent.errors import ChatError
+from agent.screenshot import MAX_SCREENSHOT_BYTES
 
 
 def device():
@@ -117,3 +119,49 @@ def test_input_validation(client, fake_gemini):
     assert post(client, {"X-Device-Id": "short"}).status_code == 422
     assert post(client, {"X-Device-Id": "d" * 65}).status_code == 422
     assert fake_gemini.calls == []
+
+
+# ── screenshots ───────────────────────────────────────────────────────────────
+
+def png_b64(extra: bytes = b"") -> str:
+    return base64.b64encode(b"\x89PNG\r\n\x1a\n" + extra).decode()
+
+
+def test_a_screenshot_is_passed_to_the_agent(client, fake_gemini):
+    shot = png_b64(b"pixels")
+    assert post(client, {"X-Gemini-Key": "k"}, screenshot=shot).status_code == 200
+    passed = fake_gemini.calls[0]["screenshot"]
+    assert passed.mime == "image/png" and passed.data == shot
+
+
+def test_no_screenshot_means_none(client, fake_gemini):
+    post(client, {"X-Gemini-Key": "k"})
+    assert fake_gemini.calls[0]["screenshot"] is None
+
+
+def test_a_bad_screenshot_is_rejected_and_not_echoed(client, fake_gemini):
+    marker = "NOT-AN-IMAGE-" + "A" * 200
+    response = post(client, {"X-Gemini-Key": "k"}, screenshot=marker)
+    assert response.status_code == 422
+    assert marker not in response.text
+    assert fake_gemini.calls == []
+
+
+def test_an_oversized_screenshot_is_rejected_and_not_echoed(client, fake_gemini):
+    huge = png_b64(b"x" * (MAX_SCREENSHOT_BYTES + 1000))
+    response = post(client, {"X-Gemini-Key": "k"}, screenshot=huge)
+    assert response.status_code == 422
+    assert huge[:100] not in response.text
+    assert fake_gemini.calls == []
+
+
+def test_a_demo_request_with_a_screenshot_counts_as_one(client, fake_gemini):
+    headers = device()
+    assert post(client, headers, screenshot=png_b64(b"x")).status_code == 200
+    assert client.get("/quota/status", headers=headers).json()["used"] == 1
+
+
+def test_a_rejected_screenshot_does_not_cost_a_demo_request(client, fake_gemini):
+    headers = device()
+    assert post(client, headers, screenshot="garbage!").status_code == 422
+    assert client.get("/quota/status", headers=headers).json()["used"] == 0
