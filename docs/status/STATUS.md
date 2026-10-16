@@ -21,8 +21,8 @@ completed as a small, smooth, working project, and the test-agent idea lives in 
 | `backend/` FastAPI service: BYOK plus a lifetime demo with per-IP and global caps, LangGraph chat agent (`gemini-3.5-flash-lite`, fallback `gemini-3.1-flash-lite`), stateless | Working; deployed earlier on an Azure VM over plain HTTP | 64 tests pass, lint clean |
 | `client/` PySide6 desktop chat client with client-held history | Working, not packaged since the refactors. **Has no screen capture yet** | 6 tests pass |
 | `evals/pointing/` evaluation harness (labeler, runner, blind review page, scoring) | Complete; one full experiment run (ADR-0008) | 55 tests pass |
-| CI: `ci.yml` (ruff, pytest, client checks, `ci-ok` aggregate) and `docs.yml` (documentation checks) | Defined and YAML-validated; **not yet run on GitHub for this repository** | Commands run locally |
-| Documentation system: `docs/`, `AGENTS.md`, `tools/check_docs.py` | Added on branch `docs/askoverlay-docs-system` | Docs check and its tests run locally (see "Last session") |
+| CI: `ci.yml` (ruff, pytest, client checks, `ci-ok` aggregate) and `docs.yml` (documentation checks) | Ran on GitHub for the first time on the documentation pull request (2026-10-16): backend, client, `ci-ok` and `docs` all green | Green on `v1.1` after the merge |
+| Documentation system: `docs/`, `AGENTS.md`, `tools/check_docs.py` | Merged into `v1.1` (pull request 1) | Docs check passes; 31 tests pass |
 | Docker and VM deployment | Postponed to the end. `backend/Dockerfile` and `.dockerignore` hold **untested** edits (commit `0bbfef0`) | Not built |
 
 ## Decisions in force
@@ -39,12 +39,11 @@ It is a human-judged result, not independent ground truth.
 
 ## Exact next step
 
-1. Merge the documentation branch `docs/askoverlay-docs-system` into `v1.1` (pull request; CI must be green).
-2. Write the **screen-reading plan** and get the owner's approval before coding. Starting point (to confirm with the owner):
+1. Write the **screen-reading plan** and get the owner's approval before coding. Starting point (to confirm with the owner):
    the client captures one screenshot per send (the "Middle" strategy of ADR-0003); the backend declares a `read_screen` tool on
    the LangGraph agent; the model decides when to use it and answers grounded in the image; tests use fakes and one real run is
    recorded. Open sub-questions: image downscaling, privacy notice in the UI, how a user turns it off, cost on the demo tier.
-3. Then the frontend polish pass, then deployment work.
+2. Then the frontend polish pass, then deployment work.
 
 ## Open questions
 
@@ -71,5 +70,5 @@ It is a human-judged result, not independent ground truth.
 2026-10-16: split the test-agent work out into the new repository SapienZero (ADR-0009) and gave this repository its own small
 documentation system: one decision record per file, a status file, `AGENTS.md`, a docs checker in CI, security and contributing
 notes. The old combined plan stays archived on the branch `docs/plan-v0.1` (tag `archive/sapienzero-plan-v0.1`).
-Verified: backend 64, evals 55, client 6 tests pass; lint clean. **Not verified:** CI on GitHub for this repository; the
-Docker edits; anything about the screen-reading feature (not started).
+Verified: backend 64, evals 55, client 6 tests pass; lint clean; CI green on GitHub (first run for this repository); the
+documentation pull request is merged into `v1.1`. **Not verified:** the Docker edits; anything about the screen-reading feature (not started).
