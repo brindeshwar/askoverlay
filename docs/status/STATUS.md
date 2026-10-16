@@ -9,7 +9,7 @@ This file is the **single place that says where the project is right now**. It i
 
 **Finishing small.** Decided in [ADR-0009](../decisions/0009-finish-askoverlay-small-and-split-out-sapienzero.md): AskOverlay is
 completed as a small, smooth, working project, and the test-agent idea lives in its own repository (SapienZero). The order is:
-1. **Screen reading** (the owner calls it "OCR"): **built on branch `feat/screen-reading`, waiting for review and merge.** A
+1. **Screen reading** (the owner calls it "OCR"): **built and merged into `v1.1` (pull request 3); the owner's trial is pending.** A
    "Look at my screen" switch sends a screenshot with each question to the vision model, as decided in
    [ADR-0010](../decisions/0010-attach-the-screenshot-directly.md). Not Tesseract.
 2. A **frontend polish** pass (to be discussed with the owner).
@@ -22,7 +22,7 @@ completed as a small, smooth, working project, and the test-agent idea lives in 
 | `backend/` FastAPI service: BYOK plus a lifetime demo with per-IP and global caps, LangGraph chat agent (`gemini-3.5-flash-lite`, fallback `gemini-3.1-flash-lite`), stateless; **now accepts an optional screenshot** (validated, 1.5 MB limit, never stored, redacted from logs) | Working; deployed earlier on an Azure VM over plain HTTP. **The deployed VM does not have the screenshot support yet** | 84 tests pass, lint clean |
 | `client/` PySide6 desktop chat client with client-held history; **"Look at my screen" switch** (off by default, remembered, one-time privacy notice, chat window left out of the capture, image downsized to 1280 px JPEG) | Working in scripted checks; not packaged since the refactors | 19 tests pass (13 new, for the pure helpers) |
 | `evals/pointing/` evaluation harness (labeler, runner, blind review page, scoring) | Complete; one full experiment run (ADR-0008) | 55 tests pass |
-| CI: `ci.yml` (ruff, pytest, client checks, `ci-ok` aggregate) and `docs.yml` (documentation checks) | Green on GitHub for the documentation pull requests | Green on `v1.1`; the screen-reading pull request has its own run |
+| CI: `ci.yml` (ruff, pytest, client checks, `ci-ok` aggregate) and `docs.yml` (documentation checks) | Green on GitHub for the documentation pull requests | Green on `v1.1`, including the screen-reading pull request |
 | Documentation system: `docs/`, `AGENTS.md`, `tools/check_docs.py` | Merged into `v1.1` | Docs check passes; 31 tests pass |
 | Docker and VM deployment | Postponed to the end. `backend/Dockerfile` and `.dockerignore` hold **untested** edits (commit `0bbfef0`) | Not built |
 
@@ -45,10 +45,9 @@ screenshot directly). Superseded: ADR-0001, 0002. See the [decision log](../deci
 
 ## Exact next step
 
-1. Review and merge the pull request for `feat/screen-reading` into `v1.1` (CI must be green).
-2. **Owner trial:** run the client, turn on "Look at my screen", and ask about something on screen. Report anything that feels
+1. **Owner trial:** run the client, turn on "Look at my screen", and ask about something on screen. Report anything that feels
    slow, wrong or confusing. This is the part scripted checks cannot judge.
-3. Then discuss the **frontend polish** pass, and after that deployment work (the VM needs the new backend, and HTTPS).
+2. Then discuss the **frontend polish** pass, and after that deployment work (the VM needs the new backend, and HTTPS).
 
 ## Open questions
 
@@ -76,7 +75,7 @@ screenshot directly). Superseded: ADR-0001, 0002. See the [decision log](../deci
 
 ## Last session
 
-2026-10-16: built the screen-reading feature on `feat/screen-reading` (ADR-0010): backend (schema, validation, image to the
+2026-10-16: built the screen-reading feature (ADR-0010; merged via pull request 3): backend (schema, validation, image to the
 model on both models, redaction filter, 422 that does not echo images), client (capture, switch, privacy notice, payload), 33
 new tests. Verified: backend 84, client 19, evals 55, tools 31 tests; lint clean; real-model checks described above. Also
 recorded two lessons (L-27, L-28). **Not verified:** see the first housekeeping item.
