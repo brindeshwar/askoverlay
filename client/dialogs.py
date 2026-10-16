@@ -29,6 +29,43 @@ def show_first_run_dialog():
     return result["choice"]
 
 
+def show_screen_notice():
+    """Shown the first time "Look at my screen" is turned on. Returns True if the user accepts."""
+    dialog = QDialog()
+    dialog.setWindowTitle("Look at my screen")
+    dialog.setFixedSize(380, 250)
+
+    layout = QVBoxLayout()
+    label = QLabel(
+        "While this is on, a screenshot of your screen is sent with each question to Google's Gemini model, "
+        "so it can see what you see. AskOverlay does not store or log it, and it is not kept in your chat "
+        "history.\n\n"
+        "In demo mode it passes through the AskOverlay server on the way. With your own key, check the terms "
+        "for that key: some free tiers allow Google to use what you send.\n\n"
+        "Close anything private first. You can turn this off at any time."
+    )
+    label.setWordWrap(True)
+    layout.addWidget(label)
+
+    result = {"accepted": False}
+
+    def pick(value):
+        result["accepted"] = value
+        dialog.accept()
+
+    accept_button = QPushButton("Turn it on")
+    accept_button.clicked.connect(lambda: pick(True))
+    layout.addWidget(accept_button)
+
+    cancel_button = QPushButton("Not now")
+    cancel_button.clicked.connect(lambda: pick(False))
+    layout.addWidget(cancel_button)
+
+    dialog.setLayout(layout)
+    dialog.exec()
+    return result["accepted"]
+
+
 def show_quota_dialog(detail_message):
     """Returns "byok" if the user wants to add their own key, else None."""
     dialog = QDialog()
