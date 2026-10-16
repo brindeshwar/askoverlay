@@ -1,0 +1,45 @@
+name: Bug report
+description: Something behaves differently from what the requirements or documentation say
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should happen? Cite the requirement or document if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Exact commands and inputs. Do not paste secrets or private data.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Python version, package version or commit, model provider.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - P0 - wrong verdict (false pass), data loss, or a security problem
+        - P1 - a requirement is not met
+        - P2 - inconvenient, a workaround exists
+        - P3 - cosmetic
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Logs, event excerpts, run id. Redact anything private.
