@@ -1,0 +1,30 @@
+name: Docs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependency
+        run: pip install pytest==9.1.1
+      - name: Documentation checks (reproduce locally with python tools/check_docs.py)
+        run: python tools/check_docs.py
+      - name: Tests for the documentation checker (locally python -m pytest -q tools)
+        run: python -m pytest -q tools

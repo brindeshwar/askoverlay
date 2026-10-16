@@ -1,0 +1,9 @@
+# Code owners are asked to review changes to the paths they own. Security-relevant and process paths are listed explicitly.
+
+*                         @brindeshwar
+
+/.github/                 @brindeshwar
+/AGENTS.md                @brindeshwar
+/docs/decisions/          @brindeshwar
+/backend/services/        @brindeshwar
+/backend/routes/          @brindeshwar
