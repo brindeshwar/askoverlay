@@ -13,12 +13,19 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, Huma
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from agent.errors import is_transient
+from agent.screenshot import Screenshot
 
 log = logging.getLogger("askoverlay.agent")
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Use markdown formatting naturally where it helps clarity "
     "(headers, bold, bullet points, code blocks)."
+)
+
+SCREEN_PROMPT = (
+    " The user's latest message comes with a screenshot of their screen. Use it when the question is about what is on "
+    "screen; if the question is unrelated to the screen, ignore the screenshot. Do not describe private details you "
+    "were not asked about."
 )
 
 
@@ -48,12 +55,27 @@ def visible_text(chunk: object) -> str:
     )
 
 
-def to_messages(history: list[tuple[str, str]], message: str) -> list[BaseMessage]:
-    """System prompt + the client-supplied history (role, text) + the new user message."""
-    messages: list[BaseMessage] = [SystemMessage(SYSTEM_PROMPT)]
+def to_messages(
+    history: list[tuple[str, str]], message: str, screenshot: Screenshot | None = None
+) -> list[BaseMessage]:
+    """System prompt + the client-supplied history (role, text) + the new user message.
+
+    A screenshot belongs to the newest message only; history stays text.
+    """
+    messages: list[BaseMessage] = [SystemMessage(SYSTEM_PROMPT + (SCREEN_PROMPT if screenshot else ""))]
     for role, content in history:
         messages.append(HumanMessage(content) if role == "user" else AIMessage(content))
-    messages.append(HumanMessage(message))
+    if screenshot:
+        messages.append(
+            HumanMessage(
+                [
+                    {"type": "text", "text": message},
+                    {"type": "image_url", "image_url": {"url": screenshot.data_url}},
+                ]
+            )
+        )
+    else:
+        messages.append(HumanMessage(message))
     return messages
 
 

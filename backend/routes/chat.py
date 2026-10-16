@@ -3,12 +3,13 @@ import logging
 from fastapi import APIRouter, Header, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from config import Settings, get_settings
 from database.connection import get_db
 from agent.errors import ChatError
+from agent.screenshot import MAX_SCREENSHOT_B64_CHARS, Screenshot, parse_screenshot
 from services.chat_service import start_chat_stream
 from services.quota_service import DemoDecision, DemoLimits, consume_demo_request, get_demo_usage, refund_demo_request
 
@@ -38,6 +39,19 @@ class ChatRequest(BaseModel):
 
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     history: list[HistoryTurn] = Field(default_factory=list, max_length=MAX_HISTORY_TURNS)
+    # Optional screenshot (base64 JPEG or PNG) for this message only; it is never part of the history and never stored.
+    screenshot: str | None = Field(default=None, max_length=MAX_SCREENSHOT_B64_CHARS)
+
+    @field_validator("screenshot")
+    @classmethod
+    def screenshot_is_an_image(cls, value):
+        if value is not None:
+            parse_screenshot(value)
+        return value
+
+    @property
+    def parsed_screenshot(self) -> Screenshot | None:
+        return parse_screenshot(self.screenshot) if self.screenshot else None
 
     @model_validator(mode="after")
     def bounded_total_size(self):
@@ -64,7 +78,7 @@ def client_ip(request: Request, settings: Settings) -> str:
 async def _stream(api_key: str, request: ChatRequest, settings: Settings) -> StreamingResponse:
     history = [(turn.role, turn.content) for turn in request.history]
     try:
-        lines = await start_chat_stream(api_key, history, request.message, settings)
+        lines = await start_chat_stream(api_key, history, request.message, settings, request.parsed_screenshot)
     except ChatError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail) from e
     return StreamingResponse(lines, media_type="text/event-stream", headers=SSE_HEADERS)

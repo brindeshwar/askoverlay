@@ -11,6 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from agent.errors import ChatError, translate
 from agent.graph import build_graph, to_messages, visible_text
+from agent.screenshot import Screenshot
 from config import Settings
 
 log = logging.getLogger("askoverlay.chat_service")
@@ -58,6 +59,7 @@ async def start_chat_stream(
     history: list[tuple[str, str]],
     message: str,
     settings: Settings,
+    screenshot: Screenshot | None = None,
 ) -> AsyncIterator[str]:
     """Start answering and return an async iterator of SSE lines.
 
@@ -75,10 +77,13 @@ async def start_chat_stream(
 
     log.info(
         f"Starting chat: model={settings.gemini_model}, "
-        f"fallback={settings.gemini_fallback_model or 'none'}, history_turns={len(history)}"
+        f"fallback={settings.gemini_fallback_model or 'none'}, history_turns={len(history)}, "
+        f"screenshot={'yes' if screenshot else 'no'}"
     )
     graph = build_graph(primary, fallback)
-    events = graph.astream({"messages": to_messages(history, message), "failed_over": False}, stream_mode="messages")
+    events = graph.astream(
+        {"messages": to_messages(history, message, screenshot), "failed_over": False}, stream_mode="messages"
+    )
 
     try:
         first = await _first_text(events)
